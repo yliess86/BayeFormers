@@ -6,8 +6,8 @@ import torch
 
 
 def is_module_bayesian(module: Module) -> bool:
-    log_prior = hasattr(modules, "log_prior")
-    log_variational_posterior = hasattr(modules, "log_variational_posterior")
+    log_prior = hasattr(module, "log_prior")
+    log_variational_posterior = hasattr(module, "log_variational_posterior")
     return log_prior and log_variational_posterior
 
 
@@ -23,11 +23,14 @@ class Model(Module):
         return filter(is_module_bayesian, self.children())
 
     def log_prior(self) -> Tensor:
-        return torch.sum([
-            child.log_prior for child in self.bayesian_children
-        ])
+        value = 0.0
+        for child in self.bayesian_children:
+            value += child.log_prior
+        return value
+
 
     def log_variational_posterior(self) -> Tensor:
-        return torch.sum([
-            child.log_variational_posterior for child in self.bayesian_children
-        ])
+        value = 0.0
+        for child in self.bayesian_children:
+            value += child.log_variational_posterior 
+        return value

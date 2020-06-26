@@ -7,6 +7,7 @@ from bayeformers.nn.parameters.initializations import Initialization
 from torch import Size
 from torch import Tensor
 from torch.nn import Module
+from typing import Optional
 
 import numpy as np
 import torch
@@ -16,19 +17,20 @@ import torch.nn.functional as F
 
 class Linear(Module):
     def __init__(
-        self, in_features: int, out_features: int, bias: bool = True,
-        initialization: Initialization = DEFAULT_UNIFORM,
-        prior: Parameter = DEFAULT_SCALED_GAUSSIAN_MIXTURE
+        self, in_features: int, out_features: int, bias: Optional[bool] = True,
+        initialization: Optional[Initialization] = DEFAULT_UNIFORM,
+        prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE
     ) -> None:
+        super(Linear, self).__init__()
         self.in_features, self.out_features = in_features, out_features
         self.initialization = initialization
 
-        size = torch.Size(self.out_features, self.in_features)
+        size = Size((self.out_features, self.in_features))
         self.weight = Gaussian(size, self.initialization)
         self.weight_prior = prior
         
         if bias:
-            size = Size(self.out_features)
+            size = Size((self.out_features, ))
             self.bias = Gaussian(size, self.initialization)
             self.bias_prior = prior
         else:

@@ -4,18 +4,21 @@ from bayeformers.nn.functionnal import reparametrization_trick
 from bayeformers.nn.parameters.base import parameter
 from bayeformers.nn.parameters.base import Parameter
 from bayeformers.nn.parameters.initializations import DEFAULT_UNIFORM
+from bayeformers.nn.parameters.initializations import Initialization
 from torch import Size
 from torch import Tensor
 from torch.distributions.normal import Normal
+from typing import Optional
 
 import numpy as np
+import torch
 import torch.nn.functional as F
 
 
 class Gaussian(Parameter):
     def __init__(
         self, size: Size,
-        initialization: Initialization = DEFAULT_UNIFORM,
+        initialization: Optional[Initialization] = DEFAULT_UNIFORM,
         dtype: Optional[torch.dtype] = torch.float32
     ) -> None:
         super(Gaussian, self).__init__()
@@ -34,7 +37,7 @@ class Gaussian(Parameter):
         return F.softplus(self.rho)
 
     def sample(self) -> Tensor:
-        eps = self.normal.sample(self.size)
+        eps = self.normal.sample(self.size).to(self.mu.device)
         return reparametrization_trick(eps, self.mu, self.sigma)
 
     def log_prob(self, input: Tensor) -> Tensor:
