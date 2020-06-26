@@ -5,6 +5,7 @@ import inspect
 
 from bayeformers.nn import AVAILABLE_LAYERS
 from bayeformers.nn.model import Model
+from bayeformers.nn.layers.linear import Linear
 
 """
     Look for the corresponding class type in the available layers
@@ -33,21 +34,8 @@ def get_bayesian_replacement_instance(module: nn.modules.Module) -> Model:
         raise Exception(
             f"Layer {str(module)} has no Bayesian correspondance in Bayeformers"
         )
-
-    constructor_args = {}  # what we will call bayesian_class.__init__ with
-
-    args = inspect.getfullargspec(module.__init__)
-    for arg in args.args[1:]:  # skip self
-        try:
-            constructor_args[arg] = getattr(module, arg)
-        except AttributeError:
-            raise Exception(f"Internal attribute {arg} nor found in {module}")
-
-    # TODO Gaussian initalization method choice goes here
-    bayesian_module = bayesian_class(**constructor_args)
-    # TODO Parameters initalization goes here
-
-    return bayesian_module
+    # TODO Initialization goes here
+    return bayesian_class.from_frequentist(module)
 
 
 """
