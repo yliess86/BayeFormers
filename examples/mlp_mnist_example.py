@@ -2,37 +2,39 @@ from torch import Tensor
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
+from torchvision.transforms import ToTensor
 from tqdm import tqdm
 
 import bayeformers.nn as bnn
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class BMLP(bnn.Model):
     def __init__(self, in_features: int, hidden: int, n_classes: int) -> None:
-        super(BMPL, self).__init__()
-        self.mlp = nn.Sequential([
+        super(BMLP, self).__init__()
+        self.mlp = nn.Sequential(
             bnn.Linear(in_features, hidden), nn.ReLU(),
             bnn.Linear(hidden, hidden), nn.ReLU(),
             bnn.Linear(hidden, n_classes), nn.Softmax(),
-        ])
+        )
 
     def forward(self, input: Tensor) -> Tensor:
-        return self.mpl(input)
+        return self.mlp(input)
 
 
 # class MLP(nn.Module):
 #     def __init__(self, in_features: int, hidden: int, n_classes: int) -> None:
 #         super(MPL, self).__init__()
-#         self.mlp = nn.Sequential([
+#         self.mlp = nn.Sequential(
 #             nn.Linear(in_features, hidden), nn.ReLU(),
 #             nn.Linear(hidden, hidden), nn.ReLU(),
 #             nn.Linear(hidden, n_classes), nn.Softmax(),
-#         ])
+#         )
 
 #     def forward(self, input: Tensor) -> Tensor:
-#         return self.mpl(input)
+#         return self.mlp(input)
 
 
 # BMLP = to_baeysian(MLP)
@@ -43,7 +45,9 @@ samples = 10
 batch_size = 32
 lr = 1e-3
 
-dataset = MNIST(train=true)
+dataset = MNIST(
+    root="dataset", train=True, download=True, transform=ToTensor()
+)
 loader = DataLoader(
     dataset,
     shuffle=True,
@@ -52,10 +56,10 @@ loader = DataLoader(
     pin_memory=True,
 )
 
-model = BMLP(28 * 28, 512, 10)
+model = BMLP(28 * 28, 512, 10).cuda()
 optim = Adam(model.parameters(), lr=lr)
 
-for epoch in tdqm(range(epochs), desc="Epoch"):
+for epoch in tqdm(range(epochs), desc="Epoch"):
     pbar = tqdm(loader, desc="Batch")
     for img, label in pbar:
         img, label = img.float().cuda(), label.long().cuda()
@@ -64,7 +68,7 @@ for epoch in tdqm(range(epochs), desc="Epoch"):
         log_prior = torch.zeros(samples).cuda()
         log_variational_posterior = torch.zeros(samples).cuda()
 
-        for s in tqdm(samples, desc="Sample"):
+        for s in tqdm(range(samples), desc="Sample"):
             prediction[s] = model(img.view(img.size(0), -1))
             log_prior[s] = model.log_prior()
             log_variational_posterior[s] = model.log_variational_posterior()

@@ -16,7 +16,9 @@ class Uniform(Initialization):
         self.mu_range, self.rho_range = mu_range, rho_range
 
     def __call__(self, mu: Parameter, rho: Parameter) -> TwoParameters:
-        return mu.uniform_(self.mu_range), rho.uniform_(self.rho_range)
+        mu.data = mu.data.uniform_(*self.mu_range)
+        rho.data = rho.data.uniform_(*self.rho_range)
+        return mu, rho
 
 
 DEFAULT_UNIFORM = Uniform((-0.2, 0.2), (-5, -4))
