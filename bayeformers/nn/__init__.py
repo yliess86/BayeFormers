@@ -14,3 +14,6 @@ from bayeformers.nn.parameters.gaussian import ScaledGaussianMixture
 from bayeformers.nn.parameters.initializations import DEFAULT_UNIFORM
 from bayeformers.nn.parameters.initializations import Initialization
 from bayeformers.nn.parameters.initializations import Uniform
+
+
+AVAILABLE_LAYERS = [Linear]
