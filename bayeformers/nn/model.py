@@ -3,6 +3,7 @@ from torch.nn import Module
 from typing import Iterator
 
 import torch
+import warnings
 
 
 def is_module_bayesian(module: Module) -> bool:
@@ -20,17 +21,27 @@ class Model(Module):
 
     @property
     def bayesian_children(self) -> Iterator[Module]:
-        return filter(is_module_bayesian, self.children())
+        children = filter(is_module_bayesian, self.modules())
+        children = [c for c in children if c != self]
+        return children
 
     def log_prior(self) -> Tensor:
+        children = list(self.bayesian_children)
+        if not len(children):
+            warnings.warn("No Bayesian Child is present in this model")
+
         value = 0.0
-        for child in self.bayesian_children:
+        for child in children:
             value += child.log_prior
         return value
 
 
     def log_variational_posterior(self) -> Tensor:
+        children = list(self.bayesian_children)
+        if not len(children):
+            warnings.warn("No Bayesian Child is present in this model")
+
         value = 0.0
-        for child in self.bayesian_children:
-            value += child.log_variational_posterior 
+        for child in children:
+            value += child.log_variational_posterior
         return value
