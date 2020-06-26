@@ -49,3 +49,12 @@ class Linear(Module):
         self.log_variational_posterior += self.bias.log_prob(bias)
         
         return F.linear(input, weight, bias=bias)
+
+    @classmethod
+    def from_frequentist(
+        cls, linear: Module,
+        initialization: Optional[Initialization] = DEFAULT_UNIFORM,
+        prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE
+    ) -> "Linear":
+        bias = linear.bias is not None
+        return cls(linear.in_features, linear.out_features, bias)
