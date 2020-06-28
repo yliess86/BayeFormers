@@ -12,12 +12,16 @@ def is_module_bayesian(module: Module) -> bool:
     return log_prior and log_variational_posterior
 
 
+"""
+    Bayesian Model wrapper with log_prior calculation
+"""
 class Model(Module):
-    def __init__(self) -> None:
+    def __init__(self, replaced_model: torch.nn.Module) -> None:
         super(Model, self).__init__()
+        self.replaced_model = replaced_model # the model with layers replaced with bayeformers layers
 
-    def forward(self):
-        raise NotImplemented("Forward pass not implemented yet")
+    def forward(self, *args, **kwargs):
+        return self.replaced_model.forward(*args, **kwargs)
 
     @property
     def bayesian_children(self) -> Iterator[Module]:

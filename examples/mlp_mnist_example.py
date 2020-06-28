@@ -5,40 +5,41 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
 from tqdm import tqdm
 
+from bayeformers import to_bayesian
 import bayeformers.nn as bnn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-class BMLP(bnn.Model):
-    def __init__(self, in_features: int, hidden: int, n_classes: int) -> None:
-        super(BMLP, self).__init__()
-        self.mlp = nn.Sequential(
-            bnn.Linear(in_features, hidden), nn.ReLU(),
-            bnn.Linear(hidden, hidden), nn.ReLU(),
-            bnn.Linear(hidden, n_classes), nn.Softmax(),
-        )
-
-    def forward(self, input: Tensor) -> Tensor:
-        return self.mlp(input)
-
-
-# class MLP(nn.Module):
+# class BMLP(bnn.Model):
 #     def __init__(self, in_features: int, hidden: int, n_classes: int) -> None:
-#         super(MPL, self).__init__()
+#         super(BMLP, self).__init__()
 #         self.mlp = nn.Sequential(
-#             nn.Linear(in_features, hidden), nn.ReLU(),
-#             nn.Linear(hidden, hidden), nn.ReLU(),
-#             nn.Linear(hidden, n_classes), nn.Softmax(),
+#             bnn.Linear(in_features, hidden), nn.ReLU(),
+#             bnn.Linear(hidden, hidden), nn.ReLU(),
+#             bnn.Linear(hidden, n_classes), nn.Softmax(),
 #         )
 
 #     def forward(self, input: Tensor) -> Tensor:
 #         return self.mlp(input)
 
 
-# BMLP = to_baeysian(MLP)
+class MLP(nn.Module):
+    def __init__(self, in_features: int, hidden: int, n_classes: int) -> None:
+        super(MLP, self).__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features, hidden), nn.ReLU(),
+            nn.Linear(hidden, hidden), nn.ReLU(),
+            nn.Linear(hidden, n_classes), nn.Softmax(),
+        )
 
+    def forward(self, input: Tensor) -> Tensor:
+        return self.mlp(input)
+
+
+# Get bayesian model
+model = to_bayesian(MLP(28 * 28, 512, 10)).cuda()
 
 epochs = 50
 samples = 10
@@ -56,7 +57,6 @@ loader = DataLoader(
     pin_memory=True,
 )
 
-model = BMLP(28 * 28, 512, 10).cuda()
 optim = Adam(model.parameters(), lr=lr)
 
 for epoch in tqdm(range(epochs), desc="Epoch"):
@@ -74,6 +74,7 @@ for epoch in tqdm(range(epochs), desc="Epoch"):
             log_variational_posterior[s] = model.log_variational_posterior()
 
         log_prior = log_prior.mean()
+        print(log_prior)
         log_variational_posterior = log_variational_posterior.mean()
         nll = F.nll_loss(prediction.mean(0), label, size_average=True)
 
