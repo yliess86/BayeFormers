@@ -1,30 +1,68 @@
+# -*- coding: utf-8 -*-
+"""bayeformers.nn.model
+
+The files provides bassis for building a Bayesian Model.
+"""
 from torch import Tensor
 from torch.nn import Module
+from typing import Any
 from typing import Iterator
+from typing import Optional
 
 import torch
 import warnings
 
 
 def is_module_bayesian(module: Module) -> bool:
+    """Is Module Bayesian
+
+    Arguments:
+        module (Module): module to be checked
+
+    Returns:
+        bool: is the module bayesian or not (does it provides access to
+            log_prior and log_variational_posterior)
+    """
     log_prior = hasattr(module, "log_prior")
     log_variational_posterior = hasattr(module, "log_variational_posterior")
     return log_prior and log_variational_posterior
 
 
-"""
-    Bayesian Model wrapper with log_prior calculation
-"""
 class Model(Module):
-    def __init__(self, replaced_model: torch.nn.Module) -> None:
-        super(Model, self).__init__()
-        self.replaced_model = replaced_model # the model with layers replaced with bayeformers layers
+    """Model
 
-    def forward(self, *args, **kwargs):
-        return self.replaced_model.forward(*args, **kwargs)
+    Wrapper for building a Bayesian Module. Provides methods to gather
+    log_prior and log_variational_posterior from child bayesian modules.
+
+    Attributes:
+        model (Optional[nn.Module]): base module, useful when creating the
+            bayesian module out of an exisiting frequentist one {default: None}
+    """
+
+    def __init__(self, model: Optional[Module] = None) -> None:
+        """Initialization
+
+        Arguments:
+            model (Optional[nn.Module]): base module, useful when creating the
+                bayesian module out of an exisiting frequentist one
+                {default: None}
+        """
+        super(Model, self).__init__()
+        self.model = model
+
+    def forward(self, *args, **kwargs) -> Any:
+        """Forward"""
+        if self.model is not None:
+            return self.model.forward(*args, **kwargs)
+        raise NotImplementedError("Forward pass not implemented yet")
 
     @property
     def bayesian_children(self) -> Iterator[Module]:
+        """Bayesian Children
+
+        Yields:
+            Iterator[nn.Module]: all beysian children modules
+        """
         children = filter(is_module_bayesian, self.modules())
         children = [c for c in children if c != self]
         return children

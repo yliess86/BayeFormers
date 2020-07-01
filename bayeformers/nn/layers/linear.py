@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""bayeformers.nn.layers.linear
+
+The files provides a Bayesian equivalent for the Linear module present in the
+PyTorch library as torch.nn.Linear.
+"""
 from bayeformers.nn.parameters.base import NoneParameter
 from bayeformers.nn.parameters.base import Parameter
 from bayeformers.nn.parameters.gaussian import Gaussian
@@ -16,11 +22,43 @@ import torch.nn.functional as F
 
 
 class Linear(Module):
+    """Linear
+
+    Bayesian Linear module using Gaussian parameters and a Scaled Gaussian
+    Mixture as default prior for the weights.
+
+    Attributes:
+        in_features (int): input number of features
+        out_features (int): output number of features
+        initialization (Optional[Initialization]): initialization callback
+            for the gaussian parameters
+        weight (Gaussian): gaussian weight of the linear layer
+        weight_prior (Parameter): prior of the linear layer weight
+        bias (Gaussian): gaussian bias of the linear layer
+        bias_prior (Parameter): prior of the linear layer bias
+        log_prior (torch.Tensor): log prior of the weight
+        log_variational_posterior (torch.Tensor): log variational posterior of
+            the weight
+    """
+
     def __init__(
         self, in_features: int, out_features: int, bias: Optional[bool] = True,
         initialization: Optional[Initialization] = DEFAULT_UNIFORM,
         prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE
     ) -> None:
+        """Initialization
+
+        Arguments:
+            in_features (int): input number of features
+            out_features (int): output number of features
+
+        Keyword Arguments:
+            bias (bool): presence of bias in the layer {default: True}
+            initialization (Optional[Initialization]): initialization callback
+                for the gaussian parameters {default: DEFAULT_UNIFORM}
+            prior (Optional[Parameter]): prior of the weight
+                {default: DEFAULT_SCALED_GAUSSIAN_MIXTURE}
+        """
         super(Linear, self).__init__()
         self.in_features, self.out_features = in_features, out_features
         self.initialization = initialization
@@ -41,6 +79,19 @@ class Linear(Module):
         self.log_variational_posterior = 0.0
 
     def forward(self, input: Tensor) -> Tensor:
+        """Forward
+
+        Feed forward pass of the linear layer.
+        W ~ N(mu, rho)
+        b ~ N(mu, rho)
+        z = W x + b
+
+        Args:
+            input (Tensor): input tensor
+
+        Returns:
+            Tensor: output tensor
+        """
         weight, bias = self.weight.sample(), self.bias.sample() 
         
         self.log_prior = self.weight_prior.log_prob(weight)
@@ -56,5 +107,19 @@ class Linear(Module):
         initialization: Optional[Initialization] = DEFAULT_UNIFORM,
         prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE
     ) -> "Linear":
+        """From Frequentist
+
+        Build a bayesian linear layer out of a frequentist linear layer with
+        the same parameters.
+
+        Arguments:
+            linear (Module): frequentist linear module
+
+        Keyword Arguments:
+            initialization (Optional[Initialization]): initialization callback
+                for the gaussian parameters {default: DEFAULT_UNIFORM}
+            prior (Optional[Parameter]): prior of the weight
+                {default: DEFAULT_SCALED_GAUSSIAN_MIXTURE}
+        """
         bias = linear.bias is not None
         return cls(linear.in_features, linear.out_features, bias)

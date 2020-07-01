@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+"""bayeformers.nn.__init__"""
 from bayeformers.nn.layers.linear import Linear
 
 
@@ -16,4 +18,8 @@ from bayeformers.nn.parameters.initializations import Initialization
 from bayeformers.nn.parameters.initializations import Uniform
 
 
-AVAILABLE_LAYERS = [Linear]
+import torch.nn as nn
+
+
+"""Available Bayesian Layers"""
+TORCH2BAYE = { nn.Linear: Linear }
