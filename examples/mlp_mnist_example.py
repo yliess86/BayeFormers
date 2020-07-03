@@ -59,9 +59,9 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
-        nll = F.nll_loss(prediction.mean(0), label, reduction="mean")
+        nll = F.nll_loss(prediction.mean(0), label, reduction="sum")
 
-        loss = log_variational_posterior - log_prior / len(loader) + nll
+        loss = (log_variational_posterior - log_prior) / len(loader) + nll
 
         loss.backward()
         pbar.set_postfix(loss=loss.item() / len(loader))
