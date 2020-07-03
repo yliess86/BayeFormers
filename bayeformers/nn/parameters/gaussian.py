@@ -157,8 +157,8 @@ class ScaledGaussianMixture(Parameter):
         Returns:
             Tensor: log probability
         """
-        prob1 = self.gaussian1.log_prob(input)
-        prob2 = self.gaussian2.log_prob(input)
+        prob1 = torch.exp(self.gaussian1.log_prob(input))
+        prob2 = torch.exp(self.gaussian2.log_prob(input))
         return torch.log(self.pi * prob1 + (1.0 - self.pi) * prob2).sum()
 
 
