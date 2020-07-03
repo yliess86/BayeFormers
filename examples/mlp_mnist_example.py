@@ -17,52 +17,49 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
         self.mlp = nn.Sequential(
             nn.Linear(in_features, hidden), nn.ReLU(),
-            nn.Linear(hidden, hidden), nn.ReLU(),
-            nn.Linear(hidden, n_classes), nn.Softmax(),
+            nn.Linear(hidden,      hidden), nn.ReLU(),
+            nn.Linear(hidden,   n_classes), nn.LogSoftmax(dim=1),
         )
 
     def forward(self, input: Tensor) -> Tensor:
         return self.mlp(input)
 
 
-# Get bayesian model
-model = to_bayesian(MLP(28 * 28, 512, 10)).cuda()
+EPOCHS     = 50
+SAMPLES    = 10
+BATCH_SIZE = 32
+LR         = 1e-3
+N_CLASSES  = 10
+W, H       = 28, 28
 
-epochs = 50
-samples = 10
-batch_size = 32
-lr = 1e-3
-
-dataset = MNIST(
-    root="dataset", train=True, download=True, transform=ToTensor()
-)
-loader = DataLoader(
-    dataset,
-    shuffle=True,
-    batch_size=batch_size,
-    num_workers=4,
-    pin_memory=True,
+transform = ToTensor()
+dataset = MNIST(root="dataset", train=True, download=True, transform=transform)
+loader = DataLoader(dataset,
+    shuffle=True, batch_size=BATCH_SIZE,
+    num_workers=4, pin_memory=True,
 )
 
-optim = Adam(model.parameters(), lr=lr)
+model = MLP(W * H, 512, N_CLASSES)
+model = to_bayesian(model).cuda()
+optim = Adam(model.parameters(), lr=LR)
 
-for epoch in tqdm(range(epochs), desc="Epoch"):
+for epoch in tqdm(range(EPOCHS), desc="Epoch"):
     pbar = tqdm(loader, desc="Batch")
     for img, label in pbar:
         img, label = img.float().cuda(), label.long().cuda()
 
-        prediction = torch.zeros(samples, img.size(0), 10).cuda()
-        log_prior = torch.zeros(samples).cuda()
-        log_variational_posterior = torch.zeros(samples).cuda()
+        prediction = torch.zeros(SAMPLES, img.size(0), 10).cuda()
+        log_prior = torch.zeros(SAMPLES).cuda()
+        log_variational_posterior = torch.zeros(SAMPLES).cuda()
 
-        for s in tqdm(range(samples), desc="Sample"):
+        for s in range(SAMPLES):
             prediction[s] = model(img.view(img.size(0), -1))
             log_prior[s] = model.log_prior()
             log_variational_posterior[s] = model.log_variational_posterior()
 
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
-        nll = F.nll_loss(prediction.mean(0), label, size_average=True)
+        nll = F.nll_loss(prediction.mean(0), label, reduction="mean")
 
         loss = log_variational_posterior - log_prior / len(loader) + nll
 

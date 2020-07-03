@@ -39,8 +39,8 @@ def to_bayesian(
     """
     def replace_modules(model, init, prior):
         for name, module in model.named_children():
-            if module in TORCH2BAYE:
-                bayesian = TORCH2BAYE[module]
+            if module.__class__ in TORCH2BAYE.keys():
+                bayesian = TORCH2BAYE[module.__class__]
                 bayesian = bayesian.from_frequentist(module, init, prior)
                 setattr(model, name, bayesian)
             replace_modules(module, init, prior)

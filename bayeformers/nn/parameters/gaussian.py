@@ -4,9 +4,6 @@
 The files provides classes and methods for gaussian related bayesian
 parameters. Guassian and ScaledGaussianMixture are available. 
 """
-from bayeformers.nn.functionnal import gaussian_log_prob
-from bayeformers.nn.functionnal import scaled_gaussian_mixture_log_prob
-from bayeformers.nn.functionnal import reparametrization_trick
 from bayeformers.nn.parameters.base import parameter
 from bayeformers.nn.parameters.base import Parameter
 from bayeformers.nn.parameters.initializations import DEFAULT_UNIFORM
@@ -96,7 +93,7 @@ class Gaussian(Parameter):
             Tensor: sampled gaussian weight using the reparametrization trick.
         """
         eps = self.normal.sample(self.size).to(self.mu.device)
-        return reparametrization_trick(eps, self.mu, self.sigma)
+        return self.mu + eps * self.sigma
 
     def log_prob(self, input: Tensor) -> Tensor:
         """Gaussian Log Probability
@@ -107,7 +104,11 @@ class Gaussian(Parameter):
         Returns:
             Tensor: log probability
         """
-        return gaussian_log_prob(input, self.mu, self.sigma)
+        return (
+            - np.log(np.sqrt(2 * np.pi))
+            - torch.log(self.sigma)
+            - ((input - self.mu) ** 2) / (2 * self.sigma ** 2)
+        ).sum()
 
 
 class ScaledGaussianMixture(Parameter):
@@ -156,12 +157,9 @@ class ScaledGaussianMixture(Parameter):
         Returns:
             Tensor: log probability
         """
-        return scaled_gaussian_mixture_log_prob(
-            input,
-            self.gaussian1.log_prob(input),
-            self.gaussian2.log_prob(input),
-            self.pi
-        )
+        prob1 = self.gaussian1.log_prob(input)
+        prob2 = self.gaussian2.log_prob(input)
+        return torch.log(self.pi * prob1 + (1.0 - self.pi) * prob2).sum()
 
 
 """Default initialization for the Scale Gaussian Mixture"""
