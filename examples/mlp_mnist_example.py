@@ -27,7 +27,7 @@ class MLP(nn.Module):
 
 EPOCHS     = 50
 SAMPLES    = 10
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 LR         = 1e-3
 N_CLASSES  = 10
 W, H       = 28, 28
@@ -48,6 +48,7 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
     for img, label in pbar:
         img, label = img.float().cuda(), label.long().cuda()
 
+        optim.zero_grad()
         prediction = torch.zeros(SAMPLES, img.size(0), 10).cuda()
         log_prior = torch.zeros(SAMPLES).cuda()
         log_variational_posterior = torch.zeros(SAMPLES).cuda()
@@ -62,8 +63,8 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         nll = F.nll_loss(prediction.mean(0), label, reduction="sum")
 
         loss = (log_variational_posterior - log_prior) / len(loader) + nll
-
         loss.backward()
+        optim.step()
 
         nb = len(loader)
         pbar.set_postfix(
