@@ -44,6 +44,12 @@ model = to_bayesian(model).cuda()
 optim = Adam(model.parameters(), lr=LR)
 
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
+    tot_loss = 0.0
+    tot_nll = 0.0
+    tot_log_prior = 0.0
+    tot_log_variational_posterior = 0.0
+    tot_acc = 0.0
+
     pbar = tqdm(loader, desc="Batch")
     for img, label in pbar:
         img, label = img.float().cuda(), label.long().cuda()
@@ -61,15 +67,24 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
         nll = F.nll_loss(prediction.mean(0), label, reduction="sum")
-
         loss = (log_variational_posterior - log_prior) / len(loader) + nll
+        acc = (torch.argmax(prediction.mean(0), dim=1) == label).sum()
+        
         loss.backward()
         optim.step()
 
         nb = len(loader)
+        tot_loss += loss.item() / nb
+        tot_nll += nll.item() / nb
+        tot_log_prior += log_prior.item() / nb
+        tot_log_variational_posterior += log_variational_posterior.item() / nb
+        tot_acc += acc.item() / len(dataset) * 100
+
+        nb = len(loader)
         pbar.set_postfix(
-            loss=loss.item() / nb,
-            nll=nll.item() / nb,
-            log_prior=log_prior.item() / nb,
-            log_variational_posterior=log_variational_posterior.item() / nb,
+            loss=tot_loss,
+            nll=tot_nll,
+            log_prior=tot_log_prior,
+            log_variational_posterior=tot_log_variational_posterior,
+            acc=f"{tot_acc:.2f}%"
         )
