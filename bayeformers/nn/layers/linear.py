@@ -123,6 +123,10 @@ class Linear(Module):
                 {default: DEFAULT_SCALED_GAUSSIAN_MIXTURE}
             pretrained (bool): is the model pretrained. If True pretrained
                 weights will be loaded {default: False}
+                pretrained loading following:
+                    "Specifying Weight Priors in Bayesian Deep Neural Networks
+                    with Empirical Bayes" from Krishnan et al.
+                reference: https://arxiv.org/pdf/1906.05323.pdf
         """
         bias = linear.bias is not None
         baye = cls(linear.in_features, linear.out_features, bias)
