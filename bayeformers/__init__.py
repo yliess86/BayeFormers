@@ -18,7 +18,8 @@ import torch.nn
 def to_bayesian(
     model: nn.Model,
     initialization: Optional[Initialization] = DEFAULT_UNIFORM,
-    prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE
+    prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE,
+    pretrained: bool = False,
 ) -> Model:
     """To Bayesian
     
@@ -33,17 +34,21 @@ def to_bayesian(
         initialization (Optional[Initialization]): initialization callback
             for the bayesian layers
         prior (Optional[Parameter]): the prior parameters
+        pretrained (bool): is the model pretrained? If it True, the model
+            weights will be used to initialize the bayesian weights
 
     Returns:
         Model: provided model as a bayesian
     """
-    def replace_modules(model, init, prior):
+    def replace_modules(model, init, prior, pretrained):
         for name, module in model.named_children():
             if module.__class__ in TORCH2BAYE.keys():
                 bayesian = TORCH2BAYE[module.__class__]
-                bayesian = bayesian.from_frequentist(module, init, prior)
+                bayesian = bayesian.from_frequentist(
+                    module, init, prior, pretrained
+                )
                 setattr(model, name, bayesian)
-            replace_modules(module, init, prior)
-        
-    replace_modules(model, initialization, prior)
+            replace_modules(module, init, prior, pretrained)
+
+    replace_modules(model, initialization, prior, pretrained)
     return Model(model=model)

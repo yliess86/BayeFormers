@@ -37,6 +37,7 @@ class Uniform(Initialization):
             mu_range (Range): bounds for the uniform initilaization of mu
             rho_range (Range): bounds for the uniform initilaization of rho
         """
+        super(Uniform, self).__init__()
         self.mu_range, self.rho_range = mu_range, rho_range
 
     def __call__(self, mu: Parameter, rho: Parameter) -> TwoParameters:

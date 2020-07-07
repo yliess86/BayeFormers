@@ -105,7 +105,8 @@ class Linear(Module):
     def from_frequentist(
         cls, linear: Module,
         initialization: Optional[Initialization] = DEFAULT_UNIFORM,
-        prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE
+        prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE,
+        pretrained: bool = False
     ) -> "Linear":
         """From Frequentist
 
@@ -120,6 +121,22 @@ class Linear(Module):
                 for the gaussian parameters {default: DEFAULT_UNIFORM}
             prior (Optional[Parameter]): prior of the weight
                 {default: DEFAULT_SCALED_GAUSSIAN_MIXTURE}
+            pretrained (bool): is the model pretrained. If True pretrained
+                weights will be loaded {default: False}
         """
         bias = linear.bias is not None
-        return cls(linear.in_features, linear.out_features, bias)
+        baye = cls(linear.in_features, linear.out_features, bias)
+
+        if pretrained:
+            baye.weight.mu.data = linear.weight.data
+            baye.weight.rho.data = torch.log(
+                torch.exp(0.5 * torch.abs(linear.weight.data)) - 1.0
+            )
+            
+            if linear.bias is not None:
+                baye.bias.mu.data = linear.bias.data
+                baye.bias.rho.data = torch.log(
+                    torch.exp(0.5 * torch.abs(linear.bias.data)) - 1.0
+                )
+
+        return baye
