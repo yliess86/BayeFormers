@@ -92,7 +92,7 @@ class Linear(Module):
         Returns:
             Tensor: output tensor
         """
-        weight, bias = self.weight.sample(), self.bias.sample() 
+        weight, bias = self.weight.sample(), self.bias.sample()
         
         self.log_prior = self.weight_prior.log_prob(weight)
         self.log_prior += self.bias_prior.log_prob(bias)
@@ -129,18 +129,28 @@ class Linear(Module):
                 reference: https://arxiv.org/pdf/1906.05323.pdf
         """
         bias = linear.bias is not None
-        baye = cls(linear.in_features, linear.out_features, bias)
+        baye = cls(linear.in_features, linear.out_features, bias, prior=prior)
 
         if pretrained:
             baye.weight.mu.data = linear.weight.data
             baye.weight.rho.data = torch.log(
-                torch.exp(0.5 * torch.abs(linear.weight.data)) - 1.0
+                torch.exp(0.1 * torch.abs(linear.weight.data)) - 1.0
             )
+            
+            prior = Gaussian(baye.weight.mu.size())
+            prior.mu.data = linear.weight.data
+            prior.rho.data = torch.ones_like(linear.weight)
+            baye.weight_prior = prior
             
             if linear.bias is not None:
                 baye.bias.mu.data = linear.bias.data
                 baye.bias.rho.data = torch.log(
-                    torch.exp(0.5 * torch.abs(linear.bias.data)) - 1.0
+                    torch.exp(0.1 * torch.abs(linear.bias.data)) - 1.0
                 )
+                
+                prior = Gaussian(baye.bias.mu.size())
+                prior.mu.data = linear.bias.data
+                prior.rho.data = torch.ones_like(linear.bias)
+                baye.bias_prior = prior
 
         return baye
