@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+# Model Class Definition (Frequentist Implementation)
 class MLP(nn.Module):
     def __init__(self, in_features: int, hidden: int, n_classes: int) -> None:
         super(MLP, self).__init__()
@@ -25,6 +26,7 @@ class MLP(nn.Module):
         return self.mlp(input)
 
 
+# Constants
 EPOCHS     = 50
 SAMPLES    = 10
 BATCH_SIZE = 64
@@ -32,6 +34,7 @@ LR         = 1e-3
 N_CLASSES  = 10
 W, H       = 28, 28
 
+# Dataset
 transform = ToTensor()
 dataset = MNIST(root="dataset", train=True, download=True, transform=transform)
 loader = DataLoader(dataset,
@@ -39,10 +42,12 @@ loader = DataLoader(dataset,
     num_workers=4, pin_memory=True,
 )
 
-model = MLP(W * H, 512, N_CLASSES)
-model = to_bayesian(model).cuda()
-optim = Adam(model.parameters(), lr=LR)
+# Model and Optimizer
+model = MLP(W * H, 512, N_CLASSES)      # Frequentist
+model = to_bayesian(model).cuda()       # Bayesian
+optim = Adam(model.parameters(), lr=LR) # Adam Optimizer
 
+# Main Loop
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
     tot_loss = 0.0
     tot_nll = 0.0
@@ -50,26 +55,31 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
     tot_log_variational_posterior = 0.0
     tot_acc = 0.0
 
+    # Batch Loop
     pbar = tqdm(loader, desc="Batch")
     for img, label in pbar:
         img, label = img.float().cuda(), label.long().cuda()
 
+        # Reset Grads and Setup Outputs
         optim.zero_grad()
         prediction = torch.zeros(SAMPLES, img.size(0), 10).cuda()
         log_prior = torch.zeros(SAMPLES).cuda()
         log_variational_posterior = torch.zeros(SAMPLES).cuda()
 
+        # Sample Loop (VI)
         for s in range(SAMPLES):
             prediction[s] = model(img.view(img.size(0), -1))
             log_prior[s] = model.log_prior()
             log_variational_posterior[s] = model.log_variational_posterior()
 
+        # Loss Computation
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
         nll = F.nll_loss(prediction.mean(0), label, reduction="sum")
         loss = (log_variational_posterior - log_prior) / len(loader) + nll
         acc = (torch.argmax(prediction.mean(0), dim=1) == label).sum()
         
+        # Weights Update
         loss.backward()
         optim.step()
 
