@@ -41,16 +41,17 @@ def to_bayesian(
     Returns:
         Model: provided model as a bayesian
     """
-    def replace_modules(model, init, prior, pretrained):
-        for name, module in model.named_children():
-            if module.__class__ in TORCH2BAYE.keys():
-                bayesian = TORCH2BAYE[module.__class__]
-                bayesian = bayesian.from_frequentist(
-                    module, init, prior, pretrained
-                )
+    def replace_layers(model, init, prior, pretrained):
+        for name, layer in model.named_children():
+            if layer.__class__ in TORCH2BAYE.keys():
+                probs = init, prior
+                bayesian = TORCH2BAYE[layer.__class__]
+                bayesian = bayesian.from_frequentist(layer, *probs, pretrained)
                 setattr(model, name, bayesian)
-            replace_modules(module, init, prior, pretrained)
+            replace_layers(layer, init, prior, pretrained)
 
     new_model = deepcopy(model)
-    replace_modules(new_model, initialization, prior, pretrained)
-    return Model(model=new_model)
+    replace_layers(new_model, initialization, prior, pretrained)
+    new_model = Model(model=new_model)
+    
+    return new_model
