@@ -133,10 +133,10 @@ class Linear(Module):
 
         if pretrained:
             baye.weight.mu.data = linear.weight.data
-            baye.weight.rho.data = 0.0 * torch.exp(
-                torch.log(0.0 * torch.abs(linear.weight.data)) - 1.0
-            )
-            
+            # baye.weight.rho.data = torch.exp(
+            #     torch.log(torch.abs(linear.weight.data)) - 1.0)
+            baye.weight.rho.data = -1e20 * torch.ones_like(linear.weight.data)
+
             prior = Gaussian(baye.weight.mu.size())
             prior.mu.data = linear.weight.data
             prior.rho.data = torch.ones_like(linear.weight)
@@ -144,9 +144,9 @@ class Linear(Module):
             
             if linear.bias is not None:
                 baye.bias.mu.data = linear.bias.data
-                baye.bias.rho.data = 0.0 * torch.exp(
-                    torch.log(0.0 * torch.abs(linear.bias.data)) - 1.0
-                )
+                # baye.bias.rho.data = torch.exp(
+                #     torch.log(torch.abs(linear.bias.data)) - 1.0)
+                baye.bias.rho.data = -1e20 * torch.ones_like(linear.bias.data)
                 
                 prior = Gaussian(baye.bias.mu.size())
                 prior.mu.data = linear.bias.data
