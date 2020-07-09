@@ -80,7 +80,7 @@ parameters       = [
 ] 
 
 optim    = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
-sheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, N_TRAIN_STEPS)
+scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, N_TRAIN_STEPS)
 
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
     model.train()
