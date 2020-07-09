@@ -25,7 +25,7 @@ class Initialization:
 class Uniform(Initialization):
     """Uniform Initialization
 
-    Arguments:
+    Attributes:
         mu_range (Range): bounds for the uniform initilaization of mu
         rho_range (Range): bounds for the uniform initilaization of rho
     """

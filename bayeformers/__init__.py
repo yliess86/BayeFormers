@@ -9,6 +9,7 @@ from bayeformers.nn.parameters.initializations import DEFAULT_UNIFORM
 from bayeformers.nn.parameters.initializations import Initialization
 from bayeformers.nn.parameters.base import Parameter
 from bayeformers.nn.parameters.gaussian import DEFAULT_SCALED_GAUSSIAN_MIXTURE
+from copy import deepcopy
 from typing import Optional
 
 import torch
@@ -50,5 +51,6 @@ def to_bayesian(
                 setattr(model, name, bayesian)
             replace_modules(module, init, prior, pretrained)
 
-    replace_modules(model, initialization, prior, pretrained)
-    return Model(model=model)
+    new_model = deepcopy(model)
+    replace_modules(new_model, initialization, prior, pretrained)
+    return Model(model=new_model)
