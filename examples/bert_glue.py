@@ -58,7 +58,7 @@ config    = AutoConfig.from_pretrained(MODEL_NAME, num_labels=N_LABELS, finetuni
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
-model = to_bayesian(model, pretrained=True)
+model = to_bayesian(model, delta=0.05)
 model = model.cuda()
 
 glue = GlueDataTrainingArguments(TASK_NAME, data_dir=DATA_DIR, max_seq_length=MAX_SEQ_LENGTH)

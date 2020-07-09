@@ -20,7 +20,7 @@ def to_bayesian(
     model: nn.Model,
     initialization: Optional[Initialization] = DEFAULT_UNIFORM,
     prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE,
-    pretrained: bool = False,
+    delta: float = None,
 ) -> Model:
     """To Bayesian
     
@@ -35,23 +35,28 @@ def to_bayesian(
         initialization (Optional[Initialization]): initialization callback
             for the bayesian layers
         prior (Optional[Parameter]): the prior parameters
-        pretrained (bool): is the model pretrained? If it True, the model
-            weights will be used to initialize the bayesian weights
+        delta (float): is the model pretrained? If it not None, the model
+            weights will be used to initialize the bayesian weights and delta
+            will be used for MOPED posterior init {default: None}
+            pretrained loading following:
+                    "Specifying Weight Priors in Bayesian Deep Neural Networks
+                    with Empirical Bayes" from Krishnan et al.
+            reference: https://arxiv.org/pdf/1906.05323.pdf
 
     Returns:
         Model: provided model as a bayesian
     """
-    def replace_layers(model, init, prior, pretrained):
+    def replace_layers(model, init, prior, delta):
         for name, layer in model.named_children():
             if layer.__class__ in TORCH2BAYE.keys():
                 probs = init, prior
                 bayesian = TORCH2BAYE[layer.__class__]
-                bayesian = bayesian.from_frequentist(layer, *probs, pretrained)
+                bayesian = bayesian.from_frequentist(layer, *probs, delta)
                 setattr(model, name, bayesian)
-            replace_layers(layer, init, prior, pretrained)
+            replace_layers(layer, init, prior, delta)
 
     new_model = deepcopy(model)
-    replace_layers(new_model, initialization, prior, pretrained)
+    replace_layers(new_model, initialization, prior, delta)
     new_model = Model(model=new_model)
     
     return new_model

@@ -106,7 +106,7 @@ class Linear(Module):
         cls, linear: Module,
         initialization: Optional[Initialization] = DEFAULT_UNIFORM,
         prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE,
-        pretrained: bool = False
+        delta: bool = True
     ) -> "Linear":
         """From Frequentist
 
@@ -121,8 +121,9 @@ class Linear(Module):
                 for the gaussian parameters {default: DEFAULT_UNIFORM}
             prior (Optional[Parameter]): prior of the weight
                 {default: DEFAULT_SCALED_GAUSSIAN_MIXTURE}
-            pretrained (bool): is the model pretrained. If True pretrained
-                weights will be loaded {default: False}
+            delta (float): is the model pretrained? If it not None, the model
+                weights will be used to initialize the bayesian weights and
+                delta will be used for MOPED posterior init {default: None}
                 pretrained loading following:
                     "Specifying Weight Priors in Bayesian Deep Neural Networks
                     with Empirical Bayes" from Krishnan et al.
@@ -131,9 +132,7 @@ class Linear(Module):
         bias = linear.bias is not None
         baye = cls(linear.in_features, linear.out_features, bias, prior=prior)
 
-        if pretrained:
-            delta = 0.05
-
+        if delta is not None:
             baye.weight.mu.data = linear.weight.data
             baye.weight.rho.data = torch.log(
                 torch.exp(delta * torch.abs(linear.weight.data)) - 1.0
