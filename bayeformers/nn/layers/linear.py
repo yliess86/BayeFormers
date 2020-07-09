@@ -138,6 +138,7 @@ class Linear(Module):
             baye.weight.rho.data = torch.log(
                 torch.exp(delta * torch.abs(linear.weight.data)) - 1.0
             )
+            baye.weight.rho.data[baye.weight.rho.data == float("-inf")] = 0.0
 
             prior = Gaussian(baye.weight.mu.size())
             prior.mu.data = linear.weight.data
@@ -149,6 +150,7 @@ class Linear(Module):
                 baye.bias.rho.data = torch.log(
                     torch.exp(delta * torch.abs(linear.bias.data)) - 1.0
                 )
+                baye.bias.rho.data[baye.bias.rho.data == float("-inf")] = 0.0
                 
                 prior = Gaussian(baye.bias.mu.size())
                 prior.mu.data = linear.bias.data
