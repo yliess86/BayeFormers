@@ -1,5 +1,6 @@
-from collections import namedtuple
+from argparse import ArgumentParser
 from bayeformers import to_bayesian
+from collections import namedtuple
 
 from torch.utils.data import DataLoader
 
@@ -24,22 +25,35 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+parser = ArgumentParser()
+parser.add_argument("--epochs",        type=int,   default=3,           help="epochs")
+parser.add_argument("--batch_size",    type=int,   default=8,           help="batch size")
+parser.add_argument("--learning_rate", type=float, default=2e-5,        help="learning rate")
+parser.add_argument("--samples",       type=int,   default=10,          help="samples")
+parser.add_argument("--device",        type=str,   default="cuda:0",    help="device (cpu, cuda:0, ..., cuda:n)")
+parser.add_argument("--delta",         type=float, default=0.05,        help="delta rho MPOED initialization")
+parser.add_argument("--freeze",        type=bool,  action="store_true", help="freeze bert base mu weights")
+
+args = parser.parse_args()
+
+
 MODEL_NAME     = "distilbert-base-uncased"
 TASK_NAME      = "MRPC"
 N_LABELS       = 2
 MAX_SEQ_LENGTH = 128
 DATA_DIR       = os.path.join("./dataset/glue/data", TASK_NAME)
 LOADER_OPTIONS = { "num_workers": 4, "pin_memory": True }
-EPOCHS         = 3
-BATCH_SIZE     = 8
-LR             = 2e-5
+EPOCHS         = args.epochs
+BATCH_SIZE     = args.batch_size
+LR             = args.learning_rate
 WEIGHT_DECAY   = 0
 ADAM_EPSILON   = 1e-8
 N_WARMUP_STEPS = 0
-N_TRAIN_STEPS  = EPOCHS
 MAX_GRAD_NORM  = 1
-SAMPLES        = 10
-DEVICE         = "cuda:0"
+SAMPLES        = args.samples
+DEVICE         = args.device
+FREEZE         = args.freeze
+DELTA          = args.delta
 
 
 class Report:
@@ -69,7 +83,7 @@ config    = AutoConfig.from_pretrained(MODEL_NAME, num_labels=N_LABELS, finetuni
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 o_model                  = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
-b_model                  = to_bayesian(o_model, delta=0.05, freeze=True)
+b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
 b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
 b_model                  = b_model.to(DEVICE)
 
@@ -92,7 +106,7 @@ parameters      = [
 
 criterion = nn.CrossEntropyLoss(reduction="sum").to(DEVICE)
 optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
-scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, N_TRAIN_STEPS)
+scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
 
 report = Report()
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
