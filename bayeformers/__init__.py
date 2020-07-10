@@ -20,7 +20,7 @@ def to_bayesian(
     model: nn.Model,
     initialization: Optional[Initialization] = DEFAULT_UNIFORM,
     prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE,
-    delta: float = None,
+    delta: float = None, freeze: bool = False
 ) -> Model:
     """To Bayesian
     
@@ -42,6 +42,7 @@ def to_bayesian(
                     "Specifying Weight Priors in Bayesian Deep Neural Networks
                     with Empirical Bayes" from Krishnan et al.
             reference: https://arxiv.org/pdf/1906.05323.pdf
+        freeze (bool): freeze weight's mu if delta is not None {default: False}
 
     Returns:
         Model: provided model as a bayesian
@@ -49,9 +50,9 @@ def to_bayesian(
     def replace_layers(model, init, prior, delta):
         for name, layer in model.named_children():
             if layer.__class__ in TORCH2BAYE.keys():
-                probs = init, prior
+                params = init, prior, delta, freeze
                 bayesian = TORCH2BAYE[layer.__class__]
-                bayesian = bayesian.from_frequentist(layer, *probs, delta)
+                bayesian = bayesian.from_frequentist(layer, *params)
                 setattr(model, name, bayesian)
             replace_layers(layer, init, prior, delta)
 

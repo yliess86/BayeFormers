@@ -106,7 +106,7 @@ class Linear(Module):
         cls, linear: Module,
         initialization: Optional[Initialization] = DEFAULT_UNIFORM,
         prior: Optional[Parameter] = DEFAULT_SCALED_GAUSSIAN_MIXTURE,
-        delta: bool = True
+        delta: float = None, freeze: bool = False
     ) -> "Linear":
         """From Frequentist
 
@@ -128,6 +128,8 @@ class Linear(Module):
                     "Specifying Weight Priors in Bayesian Deep Neural Networks
                     with Empirical Bayes" from Krishnan et al.
                 reference: https://arxiv.org/pdf/1906.05323.pdf
+            freeze (bool): freeze weight's mu if delta is not None
+                {default: False}
         """
         bias = linear.bias is not None
         baye = cls(linear.in_features, linear.out_features, bias, prior=prior)
@@ -138,6 +140,7 @@ class Linear(Module):
                 torch.exp(delta * torch.abs(linear.weight.data)) - 1.0
             )
             baye.weight.rho.data[baye.weight.rho.data == float("-inf")] = 0.0
+            baye.weight.mu.requires_grad = not freeze
 
             prior = Gaussian(baye.weight.mu.size())
             prior.mu.data = linear.weight.data
@@ -150,6 +153,7 @@ class Linear(Module):
                     torch.exp(delta * torch.abs(linear.bias.data)) - 1.0
                 )
                 baye.bias.rho.data[baye.bias.rho.data == float("-inf")] = 0.0
+                baye.bias.mu.requires_grad = not freeze
                 
                 prior = Gaussian(baye.bias.mu.size())
                 prior.mu.data = linear.bias.data

@@ -69,7 +69,7 @@ config    = AutoConfig.from_pretrained(MODEL_NAME, num_labels=N_LABELS, finetuni
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 o_model                  = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
-b_model                  = to_bayesian(o_model, delta=0.05)
+b_model                  = to_bayesian(o_model, delta=0.05, freeze=True)
 b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
 b_model                  = b_model.to(DEVICE)
 
