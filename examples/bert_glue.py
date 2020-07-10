@@ -83,20 +83,20 @@ train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  c
 test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
 eval_loader  = DataLoader(eval_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
 
-params_decay    = [param for name, param in model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
-params_no_decay = [param for name, param in model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
+params_decay    = [param for name, param in b_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
+params_no_decay = [param for name, param in b_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
 parameters      = [
     { "params": params_decay,    "weight_decay": WEIGHT_DECAY },
     { "params": params_no_decay, "weight_decay": 0.0 },
 ]
 
-criterion = nn.CrossEntropyLoss().to(DEVICE)
+criterion = nn.CrossEntropyLoss(reduction="sum").to(DEVICE)
 optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
 scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, N_TRAIN_STEPS)
 
 report = Report()
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
-    model.train()
+    b_model.train()
     report.reset()
     
     pbar = tqdm(train_loader, desc="Batch")
@@ -111,18 +111,18 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
 
         for sample in range(SAMPLES):
-            logits[sample] = model(**inputs)[1]
+            logits[sample] = b_model(**inputs)[1]
             log_prior[sample] = b_model.log_prior()
-            log_variational_posterior[sample] = model.log_variational_posterior()
+            log_variational_posterior[sample] = b_model.log_variational_posterior()
 
-        nll = criterion(logits.mean(0), labels, reduction="sum")
+        nll = criterion(logits.mean(0), labels)
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
         acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
 
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
         loss.backward()
-        nn.utils.clip_grad_norm(model.parameters(), MAX_GRAD_NORM)
+        nn.utils.clip_grad_norm(b_model.parameters(), MAX_GRAD_NORM)
 
         optim.step()
         scheduler.step()
