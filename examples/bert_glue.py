@@ -98,7 +98,7 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
     pbar = tqdm(train_loader, desc="Batch")
     for inputs in pbar:
         inputs = dic2cuda(inputs)
-        labels = inputs[4]
+        labels = inputs["labels"]
         optim.zero_grad()
 
         B = inputs["input_ids"].size(0)
