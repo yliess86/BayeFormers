@@ -18,9 +18,28 @@ from tqdm import tqdm
 from typing import Dict
 
 import os
+import bayeformers.nn as bnn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+MODEL_NAME     = "distilbert-base-uncased"
+TASK_NAME      = "MRPC"
+N_LABELS       = 2
+MAX_SEQ_LENGTH = 128
+DATA_DIR       = os.path.join("./dataset/glue/data", TASK_NAME)
+LOADER_OPTIONS = { "num_workers": 4, "pin_memory": True }
+EPOCHS         = 3
+BATCH_SIZE     = 8
+LR             = 2e-5
+WEIGHT_DECAY   = 0
+ADAM_EPSILON   = 1e-8
+N_WARMUP_STEPS = 0
+N_TRAIN_STEPS  = EPOCHS
+MAX_GRAD_NORM  = 1
+SAMPLES        = 10
+DEVICE         = "cuda:0"
 
 
 class Report:
@@ -42,32 +61,17 @@ class Report:
 def dic2cuda(dic: Dict) -> Dict:
     for key, value in dic.items():
         if isinstance(value, torch.Tensor):
-            dic[key] = value.cuda()
+            dic[key] = value.to(DEVICE)
     return dic
 
-
-MODEL_NAME     = "distilbert-base-uncased"
-TASK_NAME      = "MRPC"
-N_LABELS       = 2
-MAX_SEQ_LENGTH = 128
-DATA_DIR       = os.path.join("./dataset/glue/data", TASK_NAME)
-LOADER_OPTIONS = { "num_workers": 4, "pin_memory": True }
-EPOCHS         = 3
-BATCH_SIZE     = 8
-LR             = 2e-5
-WEIGHT_DECAY   = 0
-ADAM_EPSILON   = 1e-8
-N_WARMUP_STEPS = 0
-N_TRAIN_STEPS  = EPOCHS
-MAX_GRAD_NORM  = 1
-SAMPLES        = 10
 
 config    = AutoConfig.from_pretrained(MODEL_NAME, num_labels=N_LABELS, finetuning_task=TASK_NAME)
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
-model = to_bayesian(model, delta=0.05)
-model = model.cuda()
+o_model                  = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
+b_model                  = to_bayesian(o_model, delta=0.05)
+b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
+b_model                  = b_model.to(DEVICE)
 
 glue = GlueDataTrainingArguments(TASK_NAME, data_dir=DATA_DIR, max_seq_length=MAX_SEQ_LENGTH)
 
@@ -86,7 +90,7 @@ parameters      = [
     { "params": params_no_decay, "weight_decay": 0.0 },
 ]
 
-criterion = nn.CrossEntropyLoss().cuda()
+criterion = nn.CrossEntropyLoss().to(DEVICE)
 optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
 scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, N_TRAIN_STEPS)
 
@@ -102,14 +106,14 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         optim.zero_grad()
 
         B = inputs["input_ids"].size(0)
-        logits = torch.zeros(SAMPLES, B, N_LABELS).cuda()
-        log_prior = torch.zeros(SAMPLES, B).cuda()
-        log_variational_posterior = torch.zeros(SAMPLES, B).cuda()
+        logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
+        log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
+        log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
 
         for sample in range(SAMPLES):
-            logits[samples] = model(**inputs)[1]
-            log_prior[samples] = model.log_prior()
-            log_variational_posterior[samples] = model.log_variational_posterior()
+            logits[sample] = model(**inputs)[1]
+            log_prior[sample] = b_model.log_prior()
+            log_variational_posterior[sample] = model.log_variational_posterior()
 
         nll = criterion(logits.mean(0), labels, reduction="sum")
         log_prior = log_prior.mean()
