@@ -20,10 +20,18 @@ from typing import Dict
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Report:
     def __init__(self) -> None:
+        self.total = 0.0
+        self.acc = 0.0
+        self.nll = 0.0
+        self.log_prior = 0.0
+        self.log_variational_posterior = 0.0
+
+    def reset(self) -> None:
         self.total = 0.0
         self.acc = 0.0
         self.nll = 0.0
@@ -73,37 +81,40 @@ eval_loader  = DataLoader(eval_dataset,  batch_size=BATCH_SIZE, shuffle=False, c
 
 params_decay    = [param for name, param in model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
 params_no_decay = [param for name, param in model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
-
-parameters       = [
+parameters      = [
     { "params": params_decay,    "weight_decay": WEIGHT_DECAY },
     { "params": params_no_decay, "weight_decay": 0.0 },
-] 
+]
 
-optim    = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
+criterion = nn.CrossEntropyLoss().cuda()
+optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
 scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, N_TRAIN_STEPS)
 
+report = Report()
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
     model.train()
-    report = Report()
+    report.reset()
     
     pbar = tqdm(train_loader, desc="Batch")
     for inputs in pbar:
         inputs = dic2cuda(inputs)
+        labels = inputs[4]
         optim.zero_grad()
 
         B = inputs["input_ids"].size(0)
-        nll = torch.zeros(B, N_LABELS)
-        log_prior = torch.zeros(B)
-        log_variational_posterior = torch.zeros(B)
+        logits = torch.zeros(SAMPLES, B, N_LABELS).cuda()
+        log_prior = torch.zeros(SAMPLES, B).cuda()
+        log_variational_posterior = torch.zeros(SAMPLES, B).cuda()
 
         for sample in range(SAMPLES):
-            nll += model(**inputs)[0]
-            log_prior += model.log_prior()
-            log_variational_posterior += model.log_variational_posterior()
+            logits[samples] = model(**inputs)[1]
+            log_prior[samples] = model.log_prior()
+            log_variational_posterior[samples] = model.log_variational_posterior()
 
-        nll /= B
-        log_prior /= B
-        log_variational_posterior /= B
+        nll = criterion(logits.mean(0), labels, reduction="sum")
+        log_prior = log_prior.mean()
+        log_variational_posterior = log_variational_posterior.mean()
+        acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
 
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
         loss.backward()
@@ -112,12 +123,16 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         optim.step()
         scheduler.step()
 
-        report.nll = nll.item() / len(train_loader)
-        report.log_prior = log_prior.item() / len(train_loader)
-        report.log_variational_posterior = log_variational_posterior.item() / len(train_loader)
+        report.total += loss.item() / len(train_loader)
+        report.nll += nll.item() / len(train_loader)
+        report.log_prior += log_prior.item() / len(train_loader)
+        report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
+        report.acc += acc.item() / len(train_dataset) * 100
 
         pbar.set_postfix(
-            nll = report.nll,
-            log_prior = report.log_prior,
-            log_variational_posterior = report.log_variational_posterior,
+            total=report.total,
+            nll=report.nll,
+            log_prior=report.log_prior,
+            log_variational_posterior=report.log_variational_posterior,
+            acc=report.acc,
         )
