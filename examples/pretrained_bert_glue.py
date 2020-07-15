@@ -85,15 +85,12 @@ def dic2cuda(dic: Dict) -> Dict:
 
 
 os.makedirs(LOGS, exist_ok=True)
-writer = SummaryWriter(os.path.join(LOGS, EXP), filename_suffix="bayeformers_bert_glue")
+writer = SummaryWriter(os.path.join(LOGS, EXP), filename_suffix="bayeformers_pretrained_bert_glue")
 
 config    = AutoConfig.from_pretrained(MODEL_NAME, num_labels=N_LABELS, finetuning_task=TASK_NAME)
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-o_model                  = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
-b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
-b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
-b_model                  = b_model.to(DEVICE)
+o_model   = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
+o_model   = o_model.to(DEVICE)
 
 glue = GlueDataTrainingArguments(TASK_NAME, data_dir=DATA_DIR, max_seq_length=MAX_SEQ_LENGTH)
 
@@ -120,7 +117,7 @@ train_report, test_report, eval_report = Report(), Report(), Report()
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
     # ============================ TRAIN ======================================
-    b_model.train()
+    o_model.train()
     train_report.reset()
     
     pbar = tqdm(train_loader, desc="Train")
@@ -129,49 +126,25 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         labels = inputs["labels"]
         optim.zero_grad()
 
-        B = inputs["input_ids"].size(0)
-        logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
-        log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
-        log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
-
-        for sample in range(SAMPLES):
-            logits[sample] = b_model(**inputs)[1]
-            log_prior[sample] = b_model.log_prior()
-            log_variational_posterior[sample] = b_model.log_variational_posterior()
-
-        nll = criterion(logits.mean(0), labels)
-        log_prior = log_prior.mean()
-        log_variational_posterior = log_variational_posterior.mean()
-        loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
-        acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
+        logits = o_model(**inputs)[1]
+        loss = criterion(logits, labels)
+        acc = (torch.argmax(logits, dim=1) == labels).sum()
 
         loss.backward()
-        nn.utils.clip_grad_norm(b_model.parameters(), MAX_GRAD_NORM)
+        nn.utils.clip_grad_norm(o_model.parameters(), MAX_GRAD_NORM)
         optim.step()
         scheduler.step()
 
         train_report.total += loss.item() / len(train_loader)
-        train_report.nll += nll.item() / len(train_loader)
-        train_report.log_prior += log_prior.item() / len(train_loader)
-        train_report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
         train_report.acc += acc.item() / len(train_dataset) * 100
 
-        pbar.set_postfix(
-            total=train_report.total,
-            nll=train_report.nll,
-            log_prior=train_report.log_prior,
-            log_variational_posterior=train_report.log_variational_posterior,
-            acc=train_report.acc,
-        )
+        pbar.set_postfix(total=train_report.total, acc=train_report.acc)
 
-    writer.add_scalar("train_total",                     train_report.total,                     epoch)
-    writer.add_scalar("train_nll",                       train_report.nll,                       epoch)
-    writer.add_scalar("train_log_prior",                 train_report.log_prior,                 epoch)
-    writer.add_scalar("train_log_variational_posterior", train_report.log_variational_posterior, epoch)
-    writer.add_scalar("train_acc",                       train_report.acc,                       epoch)
+    writer.add_scalar("train_total", train_report.total, epoch)
+    writer.add_scalar("train_acc",   train_report.acc,   epoch)
 
     # ============================ TEST =======================================
-    b_model.eval()
+    o_model.eval()
     test_report.reset()
     
     with torch.no_grad():
@@ -180,43 +153,23 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
             inputs = dic2cuda(inputs)
             labels = inputs["labels"]
 
-            B = inputs["input_ids"].size(0)
-            logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
-            log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
-            log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
-
-            for sample in range(SAMPLES):
-                logits[sample] = b_model(**inputs)[1]
-                log_prior[sample] = b_model.log_prior()
-                log_variational_posterior[sample] = b_model.log_variational_posterior()
-
-            nll = criterion(logits.mean(0), labels)
-            log_prior = log_prior.mean()
-            log_variational_posterior = log_variational_posterior.mean()
-            loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
-            acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
+            logits = o_model(**inputs)[1]
+            loss = criterion(logits, labels)
+            acc = (torch.argmax(logits, dim=1) == labels).sum()
 
             test_report.total += loss.item() / len(train_loader)
-            test_report.nll += nll.item() / len(train_loader)
-            test_report.log_prior += log_prior.item() / len(train_loader)
-            test_report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
             test_report.acc += acc.item() / len(train_dataset) * 100
 
-            pbar.set_postfix(
-                total=test_report.total,
-                nll=test_report.nll,
-                log_prior=test_report.log_prior,
-                log_variational_posterior=test_report.log_variational_posterior,
-                acc=test_report.acc,
-            )
+            pbar.set_postfix(total=test_report.total, acc=test_report.acc)
 
-    writer.add_scalar("test_total",                     test_report.total,                     epoch)
-    writer.add_scalar("test_nll",                       test_report.nll,                       epoch)
-    writer.add_scalar("test_log_prior",                 test_report.log_prior,                 epoch)
-    writer.add_scalar("test_log_variational_posterior", test_report.log_variational_posterior, epoch)
-    writer.add_scalar("test_acc",                       test_report.acc,                       epoch)
+    writer.add_scalar("test_total", test_report.total, epoch)
+    writer.add_scalar("test_acc",   test_report.acc,   epoch)
 
 # ============================ EVALUTATION ====================================
+b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
+b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
+b_model                  = b_model.to(DEVICE)
+
 b_model.eval()
 eval_report.reset()
 
@@ -239,8 +192,8 @@ with torch.no_grad():
         nll = criterion(logits.mean(0), labels)
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
-        loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
         acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
+        loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
 
         eval_report.total += loss.item() / len(train_loader)
         eval_report.nll += nll.item() / len(train_loader)
