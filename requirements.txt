@@ -1,0 +1,6 @@
+tqdm>=4.43.0
+torch>=1.5.0
+torchvision>=0.6.0
+numpy>=1.18.1
+transformers>=3.0.0
+tensorboardX>=2.1
