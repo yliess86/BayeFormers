@@ -102,8 +102,8 @@ train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  c
 test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
 eval_loader  = DataLoader(eval_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
 
-params_decay    = [param for name, param in b_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
-params_no_decay = [param for name, param in b_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
+params_decay    = [param for name, param in o_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
+params_no_decay = [param for name, param in o_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
 parameters      = [
     { "params": params_decay,    "weight_decay": WEIGHT_DECAY },
     { "params": params_no_decay, "weight_decay": 0.0 },
