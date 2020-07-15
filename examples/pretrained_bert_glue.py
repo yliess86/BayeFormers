@@ -95,12 +95,10 @@ o_model   = o_model.to(DEVICE)
 glue = GlueDataTrainingArguments(TASK_NAME, data_dir=DATA_DIR, max_seq_length=MAX_SEQ_LENGTH)
 
 train_dataset = GlueDataset(glue, tokenizer=tokenizer)
-test_dataset  = GlueDataset(glue, tokenizer=tokenizer, mode="test")
-eval_dataset  = GlueDataset(glue, tokenizer=tokenizer, mode="dev")
+test_dataset  = GlueDataset(glue, tokenizer=tokenizer, mode="dev")
 
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate, **LOADER_OPTIONS)
 test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
-eval_loader  = DataLoader(eval_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
 
 params_decay    = [param for name, param in o_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
 params_no_decay = [param for name, param in o_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
@@ -113,7 +111,7 @@ criterion = nn.CrossEntropyLoss(reduction="sum").to(DEVICE)
 optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
 scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
 
-train_report, test_report, eval_report = Report(), Report(), Report()
+train_report, test_report = Report(), Report(), Report()
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
     # ============================ TRAIN ======================================
@@ -171,10 +169,10 @@ b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
 b_model                  = b_model.to(DEVICE)
 
 b_model.eval()
-eval_report.reset()
+test_report.reset()
 
 with torch.no_grad():
-    pbar = tqdm(eval_loader, desc="Eval")
+    pbar = tqdm(test_loader, desc="Eval")
     for inputs in pbar:
         inputs = dic2cuda(inputs)
         labels = inputs["labels"]
@@ -195,22 +193,22 @@ with torch.no_grad():
         acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
 
-        eval_report.total += loss.item() / len(train_loader)
-        eval_report.nll += nll.item() / len(train_loader)
-        eval_report.log_prior += log_prior.item() / len(train_loader)
-        eval_report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
-        eval_report.acc += acc.item() / len(train_dataset) * 100
+        test_report.total += loss.item() / len(train_loader)
+        test_report.nll += nll.item() / len(train_loader)
+        test_report.log_prior += log_prior.item() / len(train_loader)
+        test_report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
+        test_report.acc += acc.item() / len(train_dataset) * 100
 
         pbar.set_postfix(
-            total=eval_report.total,
-            nll=eval_report.nll,
-            log_prior=eval_report.log_prior,
-            log_variational_posterior=eval_report.log_variational_posterior,
-            acc=eval_report.acc,
+            total=test_report.total,
+            nll=test_report.nll,
+            log_prior=test_report.log_prior,
+            log_variational_posterior=test_report.log_variational_posterior,
+            acc=test_report.acc,
         )
 
-writer.add_scalar("eval_total",                     eval_report.total,                     epoch)
-writer.add_scalar("eval_nll",                       eval_report.nll,                       epoch)
-writer.add_scalar("eval_log_prior",                 eval_report.log_prior,                 epoch)
-writer.add_scalar("eval_log_variational_posterior", eval_report.log_variational_posterior, epoch)
-writer.add_scalar("eval_acc",                       eval_report.acc,                       epoch)
+writer.add_scalar("eval_total",                     test_report.total,                     epoch)
+writer.add_scalar("eval_nll",                       test_report.nll,                       epoch)
+writer.add_scalar("eval_log_prior",                 test_report.log_prior,                 epoch)
+writer.add_scalar("eval_log_variational_posterior", test_report.log_variational_posterior, epoch)
+writer.add_scalar("eval_acc",                       test_report.acc,                       epoch)
