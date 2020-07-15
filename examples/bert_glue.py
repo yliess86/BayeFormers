@@ -114,7 +114,7 @@ criterion = nn.CrossEntropyLoss(reduction="sum").to(DEVICE)
 optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
 scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
 
-train_report, test_report = Report(), Report(), Report()
+train_report, test_report = Report(), Report()
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
     # ============================ TRAIN ======================================
