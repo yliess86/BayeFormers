@@ -155,8 +155,8 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
             loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
             acc = (torch.argmax(logits, dim=1) == labels).float().sum()
 
-            report.total += loss.item() / len(train_loader)
-            report.acc += acc.item() / len(train_dataset) * 100
+            report.total += loss.item() / len(test_loader)
+            report.acc += acc.item() / len(test_dataset) * 100
 
             pbar.set_postfix(total=report.total, acc=report.acc)
 
@@ -191,13 +191,13 @@ with torch.no_grad():
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
         acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().sum()
-        loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
+        loss = (log_variational_posterior - log_prior) / len(test_loader) + nll
 
-        report.total += loss.item() / len(train_loader)
-        report.nll += nll.item() / len(train_loader)
-        report.log_prior += log_prior.item() / len(train_loader)
-        report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
-        report.acc += acc.item() / len(train_dataset) * 100
+        report.total += loss.item() / len(test_loader)
+        report.nll += nll.item() / len(test_loader)
+        report.log_prior += log_prior.item() / len(test_loader)
+        report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
+        report.acc += acc.item() / len(test_dataset) * 100
 
         pbar.set_postfix(
             total=report.total,
