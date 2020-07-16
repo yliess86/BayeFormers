@@ -116,7 +116,7 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
     # ============================ TRAIN ======================================
     o_model.train()
-    train_report.reset()
+    report.reset()
     
     pbar = tqdm(train_loader, desc="Train")
     for inputs in pbar:
@@ -133,17 +133,17 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         optim.step()
         scheduler.step()
 
-        train_report.total += loss.item() / len(train_loader)
-        train_report.acc += acc.item() / len(train_dataset) * 100
+        report.total += loss.item() / len(train_loader)
+        report.acc += acc.item() / len(train_dataset) * 100
 
-        pbar.set_postfix(total=train_report.total, acc=train_report.acc)
+        pbar.set_postfix(total=report.total, acc=report.acc)
 
-    writer.add_scalar("train_total", train_report.total, epoch)
-    writer.add_scalar("train_acc",   train_report.acc,   epoch)
+    writer.add_scalar("train_total", report.total, epoch)
+    writer.add_scalar("train_acc",   report.acc,   epoch)
 
     # ============================ TEST =======================================
     o_model.eval()
-    test_report.reset()
+    report.reset()
     
     with torch.no_grad():
         pbar = tqdm(test_loader, desc="Test")
@@ -155,13 +155,13 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
             loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
             acc = (torch.argmax(logits, dim=1) == labels).float().mean()
 
-            test_report.total += loss.item() / len(train_loader)
-            test_report.acc += acc.item() / len(train_dataset) * 100
+            report.total += loss.item() / len(train_loader)
+            report.acc += acc.item() / len(train_dataset) * 100
 
-            pbar.set_postfix(total=test_report.total, acc=test_report.acc)
+            pbar.set_postfix(total=report.total, acc=report.acc)
 
-    writer.add_scalar("test_total", test_report.total, epoch)
-    writer.add_scalar("test_acc",   test_report.acc,   epoch)
+    writer.add_scalar("test_total", report.total, epoch)
+    writer.add_scalar("test_acc",   report.acc,   epoch)
 
 # ============================ EVALUTATION ====================================
 b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
@@ -169,7 +169,7 @@ b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
 b_model                  = b_model.to(DEVICE)
 
 b_model.eval()
-test_report.reset()
+report.reset()
 
 with torch.no_grad():
     pbar = tqdm(test_loader, desc="Eval")
@@ -193,22 +193,22 @@ with torch.no_grad():
         acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().mean()
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
 
-        test_report.total += loss.item() / len(train_loader)
-        test_report.nll += nll.item() / len(train_loader)
-        test_report.log_prior += log_prior.item() / len(train_loader)
-        test_report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
-        test_report.acc += acc.item() / len(train_dataset) * 100
+        report.total += loss.item() / len(train_loader)
+        report.nll += nll.item() / len(train_loader)
+        report.log_prior += log_prior.item() / len(train_loader)
+        report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
+        report.acc += acc.item() / len(train_dataset) * 100
 
         pbar.set_postfix(
-            total=test_report.total,
-            nll=test_report.nll,
-            log_prior=test_report.log_prior,
-            log_variational_posterior=test_report.log_variational_posterior,
-            acc=test_report.acc,
+            total=report.total,
+            nll=report.nll,
+            log_prior=report.log_prior,
+            log_variational_posterior=report.log_variational_posterior,
+            acc=report.acc,
         )
 
-writer.add_scalar("eval_total",                     test_report.total,                     epoch)
-writer.add_scalar("eval_nll",                       test_report.nll,                       epoch)
-writer.add_scalar("eval_log_prior",                 test_report.log_prior,                 epoch)
-writer.add_scalar("eval_log_variational_posterior", test_report.log_variational_posterior, epoch)
-writer.add_scalar("eval_acc",                       test_report.acc,                       epoch)
+writer.add_scalar("eval_total",                     report.total,                     epoch)
+writer.add_scalar("eval_nll",                       report.nll,                       epoch)
+writer.add_scalar("eval_log_prior",                 report.log_prior,                 epoch)
+writer.add_scalar("eval_log_variational_posterior", report.log_variational_posterior, epoch)
+writer.add_scalar("eval_acc",                       report.acc,                       epoch)
