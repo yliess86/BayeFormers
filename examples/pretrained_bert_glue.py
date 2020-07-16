@@ -134,13 +134,13 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         loss.backward()
         nn.utils.clip_grad_norm(o_model.parameters(), MAX_GRAD_NORM)
         optim.step()
-        scheduler.step()
 
         report.total += loss.item() / len(train_loader)
         report.acc += acc.item() / len(train_dataset) * 100
 
         pbar.set_postfix(total=report.total, acc=report.acc)
 
+    scheduler.step()
     writer.add_scalar("train_total", report.total, epoch)
     writer.add_scalar("train_acc",   report.acc,   epoch)
 
@@ -175,7 +175,7 @@ b_model.eval()
 report.reset()
 
 with torch.no_grad():
-    pbar = tqdm(test_loader, desc="Eval")
+    pbar = tqdm(test_loader, desc="Bayesian Eval")
     for inputs in pbar:
         inputs = dic2cuda(inputs)
         labels = inputs["labels"]
@@ -210,8 +210,118 @@ with torch.no_grad():
             acc=report.acc,
         )
 
-writer.add_scalar("eval_total",                     report.total,                     epoch)
-writer.add_scalar("eval_nll",                       report.nll,                       epoch)
-writer.add_scalar("eval_log_prior",                 report.log_prior,                 epoch)
-writer.add_scalar("eval_log_variational_posterior", report.log_variational_posterior, epoch)
-writer.add_scalar("eval_acc",                       report.acc,                       epoch)
+writer.add_scalar("bayesian_eval_total",                     report.total,                     epoch)
+writer.add_scalar("bayesian_eval_nll",                       report.nll,                       epoch)
+writer.add_scalar("bayesian_eval_log_prior",                 report.log_prior,                 epoch)
+writer.add_scalar("bayesian_eval_log_variational_posterior", report.log_variational_posterior, epoch)
+writer.add_scalar("bayesian_eval_acc",                       report.acc,                       epoch)
+
+params_decay    = [param for name, param in b_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
+params_no_decay = [param for name, param in b_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
+parameters      = [
+    { "params": params_decay,    "weight_decay": WEIGHT_DECAY },
+    { "params": params_no_decay, "weight_decay": 0.0 },
+]
+
+criterion = nn.CrossEntropyLoss().to(DEVICE)
+optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
+scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
+
+for epoch in tqdm(range(EPOCHS), desc="Bayesian Epoch"):
+
+    # ============================ TRAIN ======================================
+    b_model.train()
+    report.reset()
+    
+    pbar = tqdm(train_loader, desc="Bayesian Train")
+    for inputs in pbar:
+        inputs = dic2cuda(inputs)
+        labels = inputs["labels"]
+        optim.zero_grad()
+
+        B = inputs["input_ids"].size(0)
+        logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
+        log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
+        log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
+
+        for sample in range(SAMPLES):
+            logits[sample] = b_model(**inputs)[1]
+            log_prior[sample] = b_model.log_prior()
+            log_variational_posterior[sample] = b_model.log_variational_posterior()
+
+        nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
+        log_prior = log_prior.mean()
+        log_variational_posterior = log_variational_posterior.mean()
+        loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
+        acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().sum()
+
+        loss.backward()
+        nn.utils.clip_grad_norm(b_model.parameters(), MAX_GRAD_NORM)
+        optim.step()
+
+        report.total += loss.item() / len(train_loader)
+        report.nll += nll.item() / len(train_loader)
+        report.log_prior += log_prior.item() / len(train_loader)
+        report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
+        report.acc += acc.item() / len(train_dataset) * 100
+
+        pbar.set_postfix(
+            total=report.total,
+            nll=report.nll,
+            log_prior=report.log_prior,
+            log_variational_posterior=report.log_variational_posterior,
+            acc=report.acc,
+        )
+
+    scheduler.step()
+    writer.add_scalar("bayesian_train_total",                     report.total,                     epoch)
+    writer.add_scalar("bayesian_train_nll",                       report.nll,                       epoch)
+    writer.add_scalar("bayesian_train_log_prior",                 report.log_prior,                 epoch)
+    writer.add_scalar("bayesian_train_log_variational_posterior", report.log_variational_posterior, epoch)
+    writer.add_scalar("bayesian_train_acc",                       report.acc,                       epoch)
+
+    # ============================ TEST =======================================
+    b_model.eval()
+    report.reset()
+    
+    with torch.no_grad():
+        pbar = tqdm(test_loader, desc="Bayesian Test")
+        for inputs in pbar:
+            inputs = dic2cuda(inputs)
+            labels = inputs["labels"]
+
+            B = inputs["input_ids"].size(0)
+            logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
+            log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
+            log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
+
+            for sample in range(SAMPLES):
+                logits[sample] = b_model(**inputs)[1]
+                log_prior[sample] = b_model.log_prior()
+                log_variational_posterior[sample] = b_model.log_variational_posterior()
+
+            nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
+            log_prior = log_prior.mean()
+            log_variational_posterior = log_variational_posterior.mean()
+            loss = (log_variational_posterior - log_prior) / len(test_loader) + nll
+            acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().sum()
+
+            report.total += loss.item() / len(test_loader)
+            report.nll += nll.item() / len(test_loader)
+            report.log_prior += log_prior.item() / len(test_loader)
+            report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
+            report.acc += acc.item() / len(test_dataset) * 100
+
+            pbar.set_postfix(
+                total=report.total,
+                nll=report.nll,
+                log_prior=report.log_prior,
+                log_variational_posterior=report.log_variational_posterior,
+                acc=report.acc,
+            )
+
+    writer.add_scalar("bayesian_test_total",                     report.total,                     epoch)
+    writer.add_scalar("bayesian_test_nll",                       report.nll,                       epoch)
+    writer.add_scalar("bayesian_test_log_prior",                 report.log_prior,                 epoch)
+    writer.add_scalar("bayesian_test_log_variational_posterior", report.log_variational_posterior, epoch)
+    writer.add_scalar("bayesian_test_acc",                       report.acc,                       epoch)

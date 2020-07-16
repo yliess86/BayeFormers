@@ -149,7 +149,6 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         loss.backward()
         nn.utils.clip_grad_norm(b_model.parameters(), MAX_GRAD_NORM)
         optim.step()
-        scheduler.step()
 
         report.total += loss.item() / len(train_loader)
         report.nll += nll.item() / len(train_loader)
@@ -165,6 +164,7 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
             acc=report.acc,
         )
 
+    scheduler.step()
     writer.add_scalar("train_total",                     report.total,                     epoch)
     writer.add_scalar("train_nll",                       report.nll,                       epoch)
     writer.add_scalar("train_log_prior",                 report.log_prior,                 epoch)
