@@ -126,7 +126,7 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
         logits = o_model(**inputs)[1]
         loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
-        acc = (torch.argmax(logits, dim=1) == labels).float().mean()
+        acc = (torch.argmax(logits, dim=1) == labels).float().sum()
 
         loss.backward()
         nn.utils.clip_grad_norm(o_model.parameters(), MAX_GRAD_NORM)
@@ -153,7 +153,7 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
             logits = o_model(**inputs)[1]
             loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
-            acc = (torch.argmax(logits, dim=1) == labels).float().mean()
+            acc = (torch.argmax(logits, dim=1) == labels).float().sum()
 
             report.total += loss.item() / len(train_loader)
             report.acc += acc.item() / len(train_dataset) * 100
@@ -190,7 +190,7 @@ with torch.no_grad():
         nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
-        acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().mean()
+        acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().sum()
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
 
         report.total += loss.item() / len(train_loader)
