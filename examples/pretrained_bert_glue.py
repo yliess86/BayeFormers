@@ -28,23 +28,26 @@ import torch.nn.functional as F
 
 
 parser = ArgumentParser()
-parser.add_argument("--exp",           type=str,   default="exp",       help="experience name for logs")
-parser.add_argument("--epochs",        type=int,   default=3,           help="epochs")
-parser.add_argument("--batch_size",    type=int,   default=8,           help="batch size")
-parser.add_argument("--learning_rate", type=float, default=2e-5,        help="learning rate")
-parser.add_argument("--samples",       type=int,   default=10,          help="samples")
-parser.add_argument("--device",        type=str,   default="cuda:0",    help="device (cpu, cuda:0, ..., cuda:n)")
-parser.add_argument("--delta",         type=float, default=0.05,        help="delta rho MPOED initialization")
-parser.add_argument("--freeze",                    action="store_true", help="freeze bert base mu weights")
+parser.add_argument("--exp",           type=str,   default="exp",                     help="experience name for logs")
+parser.add_argument("--model_name",    type=str,   default="distilbert-base-uncased", help="model name")
+parser.add_argument("--task_name",     type=str,   default="MRPC",                    help="task name")
+parser.add_argument("--n_labels",      type=int,   default=2,                         help="number of classes")
+parser.add_argument("--epochs",        type=int,   default=3,                         help="epochs")
+parser.add_argument("--batch_size",    type=int,   default=8,                         help="batch size")
+parser.add_argument("--learning_rate", type=float, default=2e-5,                      help="learning rate")
+parser.add_argument("--samples",       type=int,   default=10,                        help="samples")
+parser.add_argument("--device",        type=str,   default="cuda:0",                  help="device (cpu, cuda:0, ..., cuda:n)")
+parser.add_argument("--delta",         type=float, default=0.05,                      help="delta rho MPOED initialization")
+parser.add_argument("--freeze",                    action="store_true",               help="freeze bert base mu weights")
 
 args = parser.parse_args()
 
 
 LOGS           = "logs"
 EXP            = args.exp
-MODEL_NAME     = "distilbert-base-uncased"
-TASK_NAME      = "MRPC"
-N_LABELS       = 2
+MODEL_NAME     = args.model_name
+TASK_NAME      = args.task_name
+N_LABELS       = args.n_labels
 MAX_SEQ_LENGTH = 128
 DATA_DIR       = os.path.join("./dataset/glue/data", TASK_NAME)
 LOADER_OPTIONS = { "num_workers": 4, "pin_memory": True }
