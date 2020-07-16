@@ -110,7 +110,7 @@ parameters      = [
     { "params": params_no_decay, "weight_decay": 0.0 },
 ]
 
-criterion = nn.CrossEntropyLoss(reduction="sum").to(DEVICE)
+criterion = nn.CrossEntropyLoss().to(DEVICE)
 optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
 scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
 
@@ -137,11 +137,11 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
             log_prior[sample] = b_model.log_prior()
             log_variational_posterior[sample] = b_model.log_variational_posterior()
 
-        nll = criterion(logits.mean(0), labels)
+        nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
-        acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
+        acc = (torch.argmax(logits.mean(0), dim=1) == labels).mean()
 
         loss.backward()
         nn.utils.clip_grad_norm(b_model.parameters(), MAX_GRAD_NORM)
@@ -188,11 +188,11 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
                 log_prior[sample] = b_model.log_prior()
                 log_variational_posterior[sample] = b_model.log_variational_posterior()
 
-            nll = criterion(logits.mean(0), labels)
+            nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
             log_prior = log_prior.mean()
             log_variational_posterior = log_variational_posterior.mean()
             loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
-            acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
+            acc = (torch.argmax(logits.mean(0), dim=1) == labels).mean()
 
             test_report.total += loss.item() / len(train_loader)
             test_report.nll += nll.item() / len(train_loader)
@@ -234,11 +234,11 @@ with torch.no_grad():
             log_prior[sample] = b_model.log_prior()
             log_variational_posterior[sample] = b_model.log_variational_posterior()
 
-        nll = criterion(logits.mean(0), labels)
+        nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
-        acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
+        acc = (torch.argmax(logits.mean(0), dim=1) == labels).mean()
 
         test_report.total += loss.item() / len(train_loader)
         test_report.nll += nll.item() / len(train_loader)

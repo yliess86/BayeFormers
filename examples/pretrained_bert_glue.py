@@ -107,11 +107,11 @@ parameters      = [
     { "params": params_no_decay, "weight_decay": 0.0 },
 ]
 
-criterion = nn.CrossEntropyLoss(reduction="sum").to(DEVICE)
+criterion = nn.CrossEntropyLoss().to(DEVICE)
 optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
 scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
 
-train_report, test_report = Report(), Report()
+report = Report()
 for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
     # ============================ TRAIN ======================================
@@ -125,8 +125,8 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
         optim.zero_grad()
 
         logits = o_model(**inputs)[1]
-        loss = criterion(logits, labels)
-        acc = (torch.argmax(logits, dim=1) == labels).sum()
+        loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
+        acc = (torch.argmax(logits, dim=1) == labels).mean()
 
         loss.backward()
         nn.utils.clip_grad_norm(o_model.parameters(), MAX_GRAD_NORM)
@@ -152,8 +152,8 @@ for epoch in tqdm(range(EPOCHS), desc="Epoch"):
             labels = inputs["labels"]
 
             logits = o_model(**inputs)[1]
-            loss = criterion(logits, labels)
-            acc = (torch.argmax(logits, dim=1) == labels).sum()
+            loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
+            acc = (torch.argmax(logits, dim=1) == labels).mean()
 
             test_report.total += loss.item() / len(train_loader)
             test_report.acc += acc.item() / len(train_dataset) * 100
@@ -187,10 +187,10 @@ with torch.no_grad():
             log_prior[sample] = b_model.log_prior()
             log_variational_posterior[sample] = b_model.log_variational_posterior()
 
-        nll = criterion(logits.mean(0), labels)
+        nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
         log_prior = log_prior.mean()
         log_variational_posterior = log_variational_posterior.mean()
-        acc = (torch.argmax(logits.mean(0), dim=1) == labels).sum()
+        acc = (torch.argmax(logits.mean(0), dim=1) == labels).mean()
         loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
 
         test_report.total += loss.item() / len(train_loader)
