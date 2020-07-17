@@ -23,9 +23,9 @@ import torch.nn.functional as F
 
 
 def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float, WEIGHT_DECAY: float, DEVICE: str) -> float:
-    EPOCHS         = 1 # 5
+    EPOCHS         = 5
     BATCH_SIZE     = 8
-    SAMPLES        = 2 # 10
+    SAMPLES        = 10
     FREEZE         = True
     LOGS           = "logs"
     MAX_SEQ_LENGTH = 128
