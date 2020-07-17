@@ -14,12 +14,60 @@ from transformers.optimization import AdamW
 from transformers.optimization import get_linear_schedule_with_warmup
 from tqdm import tqdm
 from typing import Dict
+from typing import Tuple
 
 import os
 import bayeformers.nn as bnn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+class Report:
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.total                     = 0.0
+        self.acc                       = 0.0
+        self.nll                       = 0.0
+        self.log_prior                 = 0.0
+        self.log_variational_posterior = 0.0
+
+
+def dic2cuda(dic: Dict, device: str) -> Dict:
+    for key, value in dic.items():
+        if isinstance(value, torch.Tensor):
+            dic[key] = value.to(device)
+
+    return dic
+
+
+def setup_model(model_name: str, task_name: str, n_labels: int) -> Tuple[nn.Module, nn.Module] :
+    config    = AutoConfig.from_pretrained(model_name, num_labels=n_labels, finetuning_task=task_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model     = AutoModelForSequenceClassification.from_pretrained(model_name, config=config)
+
+    return model, tokenizer
+
+
+def sample_bayesian(
+    model: bnn.Model, inputs: Dict[str, torch.Tensor], samples: int, batch_size: int, n_labels: int, device: str
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    logits                    = torch.zeros(samples, batch_size, n_labels).to(device)
+    log_prior                 = torch.zeros(samples, batch_size          ).to(device)
+    log_variational_posterior = torch.zeros(samples, batch_size          ).to(device)
+
+    for sample in range(samples):
+        logits[sample]                    = model(**inputs)[1]
+        log_prior[sample]                 = model.log_prior()
+        log_variational_posterior[sample] = model.log_variational_posterior()
+
+    logits                    = logits.mean(0).view(-1, n_labels)
+    log_prior                 = log_prior.mean()
+    log_variational_posterior = log_variational_posterior.mean()
+
+    return logits, log_prior, log_variational_posterior
 
 
 def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float, WEIGHT_DECAY: float, DEVICE: str) -> float:
@@ -36,55 +84,25 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
     MAX_GRAD_NORM  = 1
     DATA_DIR       = os.path.join("./dataset/glue/data", TASK_NAME)
 
-
-    class Report:
-        def __init__(self) -> None:
-            self.total = 0.0
-            self.acc = 0.0
-            self.nll = 0.0
-            self.log_prior = 0.0
-            self.log_variational_posterior = 0.0
-
-        def reset(self) -> None:
-            self.total = 0.0
-            self.acc = 0.0
-            self.nll = 0.0
-            self.log_prior = 0.0
-            self.log_variational_posterior = 0.0
-
-
-    def dic2cuda(dic: Dict) -> Dict:
-        for key, value in dic.items():
-            if isinstance(value, torch.Tensor):
-                dic[key] = value.to(DEVICE)
-        return dic
-
-
     os.makedirs(LOGS, exist_ok=True)
-    writer = SummaryWriter(
-        os.path.join(LOGS, f"bayeformers_bert_glue.{EXP}"),
-        filename_suffix=f".DELTA_{DELTA}.WEIGHT_DECAY_{WEIGHT_DECAY}"
-    )
+    writer_path = os.path.join(LOGS, f"bayeformers_bert_glue.{EXP}")
+    writer_suff = f".DELTA_{DELTA}.WEIGHT_DECAY_{WEIGHT_DECAY}"
+    writer      = SummaryWriter(writer_path, filename_suffix=writer_suff)
+    
+    o_model, tokenizer = setup_model(MODEL_NAME, TASK_NAME, N_LABELS)
+    o_model            = o_model.to(DEVICE)
 
-    config    = AutoConfig.from_pretrained(MODEL_NAME, num_labels=N_LABELS, finetuning_task=TASK_NAME)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    o_model   = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, config=config)
-    o_model   = o_model.to(DEVICE)
-
-    glue = GlueDataTrainingArguments(TASK_NAME, data_dir=DATA_DIR, max_seq_length=MAX_SEQ_LENGTH)
-
+    glue          = GlueDataTrainingArguments(TASK_NAME, data_dir=DATA_DIR, max_seq_length=MAX_SEQ_LENGTH)
     train_dataset = GlueDataset(glue, tokenizer=tokenizer)
     test_dataset  = GlueDataset(glue, tokenizer=tokenizer, mode="dev")
-
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate, **LOADER_OPTIONS)
-    test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
-
-    params_decay    = [param for name, param in o_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
-    params_no_decay = [param for name, param in o_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
-    parameters      = [
-        { "params": params_decay,    "weight_decay": WEIGHT_DECAY },
-        { "params": params_no_decay, "weight_decay": 0.0 },
-    ]
+    train_loader  = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate, **LOADER_OPTIONS)
+    test_loader   = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
+    
+    decay           = [param for name, param in o_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
+    no_decay        = [param for name, param in o_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
+    params_decay    = { "params": decay,    "weight_decay": WEIGHT_DECAY }
+    params_no_decay = { "params": no_decay, "weight_decay": 0.0 }
+    parameters      = [params_decay, params_no_decay]
 
     criterion = nn.CrossEntropyLoss().to(DEVICE)
     optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
@@ -99,20 +117,20 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
         
         pbar = tqdm(train_loader, desc="Train")
         for inputs in pbar:
-            inputs = dic2cuda(inputs)
+            inputs = dic2cuda(inputs, DEVICE)
             labels = inputs["labels"]
-            optim.zero_grad()
 
+            optim.zero_grad()
             logits = o_model(**inputs)[1]
-            loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
-            acc = (torch.argmax(logits, dim=1) == labels).float().sum()
+            loss   = criterion(logits.view(-1, N_LABELS), labels.view(-1))
+            acc    = (torch.argmax(logits, dim=1) == labels).float().sum()
 
             loss.backward()
             nn.utils.clip_grad_norm_(o_model.parameters(), MAX_GRAD_NORM)
             optim.step()
 
-            report.total += loss.item() / len(train_loader)
-            report.acc += acc.item() / len(train_dataset) * 100
+            report.total += loss.item()      / len(train_loader)
+            report.acc   += acc.item() * 100 / len(train_dataset)
 
             pbar.set_postfix(total=report.total, acc=report.acc)
 
@@ -127,15 +145,15 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
         with torch.no_grad():
             pbar = tqdm(test_loader, desc="Test")
             for inputs in pbar:
-                inputs = dic2cuda(inputs)
+                inputs = dic2cuda(inputs, DEVICE)
                 labels = inputs["labels"]
 
                 logits = o_model(**inputs)[1]
-                loss = criterion(logits.view(-1, N_LABELS), labels.view(-1))
-                acc = (torch.argmax(logits, dim=1) == labels).float().sum()
+                loss   = criterion(logits.view(-1, N_LABELS), labels.view(-1))
+                acc    = (torch.argmax(logits, dim=1) == labels).float().sum()
 
-                report.total += loss.item() / len(test_loader)
-                report.acc += acc.item() / len(test_dataset) * 100
+                report.total += loss.item()       / len(test_loader)
+                report.acc   += acc.item() * 100  / len(test_dataset)
 
                 pbar.set_postfix(total=report.total, acc=report.acc)
 
@@ -153,30 +171,22 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
     with torch.no_grad():
         pbar = tqdm(test_loader, desc="Bayesian Eval")
         for inputs in pbar:
-            inputs = dic2cuda(inputs)
+            inputs = dic2cuda(inputs, DEVICE)
             labels = inputs["labels"]
+            B      = inputs["input_ids"].size(0)
 
-            B = inputs["input_ids"].size(0)
-            logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
-            log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
-            log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
+            samples = sample_bayesian(b_model, inputs, SAMPLES, B, N_LABELS, DEVICE)
+            logits, log_prior, log_variational_posterior = samples
 
-            for sample in range(SAMPLES):
-                logits[sample] = b_model(**inputs)[1]
-                log_prior[sample] = b_model.log_prior()
-                log_variational_posterior[sample] = b_model.log_variational_posterior()
-
-            nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
-            log_prior = log_prior.mean()
-            log_variational_posterior = log_variational_posterior.mean()
-            acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().sum()
+            nll  = criterion(logits, labels.view(-1))            
             loss = (log_variational_posterior - log_prior) / len(test_loader) + nll
+            acc  = (torch.argmax(logits, dim=1) == labels).float().sum()
 
-            report.total += loss.item() / len(test_loader)
-            report.nll += nll.item() / len(test_loader)
-            report.log_prior += log_prior.item() / len(test_loader)
+            report.total                     += loss.item()                      / len(test_loader)
+            report.nll                       += nll.item()                       / len(test_loader)
+            report.log_prior                 += log_prior.item()                 / len(test_loader)
             report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
-            report.acc += acc.item() / len(test_dataset) * 100
+            report.acc                       += acc.item() * 100                 / len(test_dataset)
 
             pbar.set_postfix(
                 total=report.total,
@@ -189,12 +199,11 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
     writer.add_scalar("bayesian_eval_nll", report.nll, epoch)
     writer.add_scalar("bayesian_eval_acc", report.acc, epoch)
 
-    params_decay    = [param for name, param in b_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
-    params_no_decay = [param for name, param in b_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
-    parameters      = [
-        { "params": params_decay,    "weight_decay": WEIGHT_DECAY },
-        { "params": params_no_decay, "weight_decay": 0.0 },
-    ]
+    decay           = [param for name, param in b_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
+    no_decay        = [param for name, param in b_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
+    params_decay    = { "params": decay,    "weight_decay": WEIGHT_DECAY }
+    params_no_decay = { "params": no_decay, "weight_decay": 0.0 }
+    parameters      = [params_decay, params_no_decay]
 
     criterion = nn.CrossEntropyLoss().to(DEVICE)
     optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
@@ -208,35 +217,27 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
         
         pbar = tqdm(train_loader, desc="Bayesian Train")
         for inputs in pbar:
-            inputs = dic2cuda(inputs)
+            inputs = dic2cuda(inputs, DEVICE)
             labels = inputs["labels"]
+            B      = inputs["input_ids"].size(0)
+
             optim.zero_grad()
+            samples = sample_bayesian(b_model, inputs, SAMPLES, B, N_LABELS, DEVICE)
+            logits, log_prior, log_variational_posterior = samples
 
-            B = inputs["input_ids"].size(0)
-            logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
-            log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
-            log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
-
-            for sample in range(SAMPLES):
-                logits[sample] = b_model(**inputs)[1]
-                log_prior[sample] = b_model.log_prior()
-                log_variational_posterior[sample] = b_model.log_variational_posterior()
-
-            nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
-            log_prior = log_prior.mean()
-            log_variational_posterior = log_variational_posterior.mean()
+            nll  = criterion(logits, labels.view(-1))            
             loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
-            acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().sum()
+            acc  = (torch.argmax(logits, dim=1) == labels).float().sum()
 
             loss.backward()
             nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
             optim.step()
 
-            report.total += loss.item() / len(train_loader)
-            report.nll += nll.item() / len(train_loader)
-            report.log_prior += log_prior.item() / len(train_loader)
+            report.total                     += loss.item()                      / len(train_loader)
+            report.nll                       += nll.item()                       / len(train_loader)
+            report.log_prior                 += log_prior.item()                 / len(train_loader)
             report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
-            report.acc += acc.item() / len(train_dataset) * 100
+            report.acc                       += acc.item() * 100                 / len(train_dataset)
 
             pbar.set_postfix(
                 total=report.total,
@@ -257,30 +258,22 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
         with torch.no_grad():
             pbar = tqdm(test_loader, desc="Bayesian Test")
             for inputs in pbar:
-                inputs = dic2cuda(inputs)
+                inputs = dic2cuda(inputs, DEVICE)
                 labels = inputs["labels"]
+                B      = inputs["input_ids"].size(0)
 
-                B = inputs["input_ids"].size(0)
-                logits = torch.zeros(SAMPLES, B, N_LABELS).to(DEVICE)
-                log_prior = torch.zeros(SAMPLES, B).to(DEVICE)
-                log_variational_posterior = torch.zeros(SAMPLES, B).to(DEVICE)
+                samples = sample_bayesian(b_model, inputs, SAMPLES, B, N_LABELS, DEVICE)
+                logits, log_prior, log_variational_posterior = samples
 
-                for sample in range(SAMPLES):
-                    logits[sample] = b_model(**inputs)[1]
-                    log_prior[sample] = b_model.log_prior()
-                    log_variational_posterior[sample] = b_model.log_variational_posterior()
-
-                nll = criterion(logits.mean(0).view(-1, N_LABELS), labels.view(-1))
-                log_prior = log_prior.mean()
-                log_variational_posterior = log_variational_posterior.mean()
+                nll  = criterion(logits, labels.view(-1))            
                 loss = (log_variational_posterior - log_prior) / len(test_loader) + nll
-                acc = (torch.argmax(logits.mean(0), dim=1) == labels).float().sum()
+                acc  = (torch.argmax(logits, dim=1) == labels).float().sum()
 
-                report.total += loss.item() / len(test_loader)
-                report.nll += nll.item() / len(test_loader)
-                report.log_prior += log_prior.item() / len(test_loader)
+                report.total                     += loss.item()                      / len(test_loader)
+                report.nll                       += nll.item()                       / len(test_loader)
+                report.log_prior                 += log_prior.item()                 / len(test_loader)
                 report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
-                report.acc += acc.item() / len(test_dataset) * 100
+                report.acc                       += acc.item() * 100                 / len(test_dataset)
 
                 pbar.set_postfix(
                     total=report.total,
