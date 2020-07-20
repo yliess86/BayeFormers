@@ -163,7 +163,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         
         pbar = tqdm(train_loader, desc="Train")
         for inputs in pbar:
-            inputs = setup_inputs(inputs)
+            inputs = setup_inputs(inputs, MODEL_NAME, o_model)
             inputs = dic2cuda(inputs, DEVICE)
             
             start_positions = inputs["start_positions"]
@@ -208,7 +208,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         with torch.no_grad():
             pbar = tqdm(test_loader, desc="Test")
             for inputs in pbar:
-                inputs = setup_inputs(inputs)
+                inputs = setup_inputs(inputs, MODEL_NAME, o_model)
                 inputs = dic2cuda(inputs, DEVICE)
                 
                 start_positions = inputs["start_positions"]
@@ -250,7 +250,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     with torch.no_grad():
         pbar = tqdm(test_loader, desc="Bayesian Eval")
         for inputs in pbar:
-            inputs = setup_inputs(inputs)
+            inputs = setup_inputs(inputs, MODEL_NAME, o_model)
             inputs = dic2cuda(inputs, DEVICE)
 
             start_positions = inputs["start_positions"]
@@ -309,7 +309,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         
         pbar = tqdm(train_loader, desc="Bayesian Train")
         for inputs in pbar:
-            inputs = setup_inputs(inputs)
+            inputs = setup_inputs(inputs, MODEL_NAME, o_model)
             inputs = dic2cuda(inputs, DEVICE)
 
             start_positions = inputs["start_positions"]
@@ -364,7 +364,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         with torch.no_grad():
             pbar = tqdm(test_loader, desc="Bayesian Test")
             for inputs in pbar:
-                inputs = setup_inputs(inputs)
+                inputs = setup_inputs(inputs, MODEL_NAME, o_model)
                 inputs = dic2cuda(inputs, DEVICE)
 
                 start_positions = inputs["start_positions"]
