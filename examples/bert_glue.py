@@ -87,7 +87,7 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
     os.makedirs(LOGS, exist_ok=True)
     writer_path = os.path.join(LOGS, f"bayeformers_bert_glue.{EXP}")
     writer_suff = f".DELTA_{DELTA}.WEIGHT_DECAY_{WEIGHT_DECAY}"
-    writer      = SummaryWriter(writer_path, filename_suffix=writer_suff)
+    writer      = SummaryWriter(writer_path + writer_suff)
     
     o_model, tokenizer = setup_model(MODEL_NAME, TASK_NAME, N_LABELS)
     o_model            = o_model.to(DEVICE)
@@ -285,6 +285,13 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
 
         writer.add_scalar("bayesian_test_nll", report.nll, epoch)
         writer.add_scalar("bayesian_test_acc", report.acc, epoch)
+
+    torch.save({
+        "weight_decay": WEIGHT_DECAY,
+        "delta": DELTA,
+        "acc": report.acc,
+        "model": b_model.state_dict()
+    }, f"{writer_path + writer_suff}.pth")
 
     return report.acc
 

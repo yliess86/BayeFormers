@@ -37,11 +37,12 @@ class HyperSearch:
     ) -> Score:
         for iteration in range(iterations):
             params = { k: self._sample(v) for k, v in self.parameters.items() }
-            score = train_fn(*args, **params, **kargs)
-            if score > self.best_score[0]:
+            score = Score(train_fn(*args, **params, **kargs), params)
+            if score.score > self.best_score.score:
                 self.best_score.score = score
                 self.best_score.parameters = params
             print("========================= SCORE =========================")
             print(score)
+            print(self.best_score)
             print("=========================================================")
         return self.best_score
