@@ -53,7 +53,7 @@ def setup_model(model_name: str, lower_case: bool) -> Tuple[nn.Module, nn.Module
 
 
 def setup_squadv1_dataset(data_dir: str, tokenizer: nn.Module, test: bool = False, **kwargs) -> Dataset:
-    cached_path = os.path.join(data_dir, f"{'dev' if test else 'train'}.pth")
+    cached_path = os.path.join(data_dir, f"{'dev' if test else 'train'}v1.pth")
     if os.path.isfile(cached_path):
         return torch.load(cached_path)["dataset"] 
     
