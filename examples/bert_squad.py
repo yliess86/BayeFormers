@@ -123,7 +123,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     DOC_STRIDE       = 128
     MAX_QUERY_LENGTH = 64
     LOWER_CASE       = True
-    THREADS          = 1
+    THREADS          = 4
     LOADER_OPTIONS   = { "num_workers": 6, "pin_memory": True }
     LR               = 5e-5
     ADAM_EPSILON     = 1e-8
