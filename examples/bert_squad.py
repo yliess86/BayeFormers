@@ -186,8 +186,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             end_logits             =   end_logits.clamp_(0, ignored_idx)
             criterion.ignore_index = ignored_idx
 
-            start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1))
-            end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1))
+            start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1, MAX_QUERY_LENGTH))
+            end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1, MAX_QUERY_LENGTH))
             start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
             end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
 
@@ -229,8 +229,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 end_logits             =   end_logits.clamp_(0, ignored_idx)
                 criterion.ignore_index = ignored_idx
 
-                start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1))
-                end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1))
+                start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1, MAX_QUERY_LENGTH))
+                end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1, MAX_QUERY_LENGTH))
                 start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
                 end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
 
@@ -271,8 +271,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             end_logits             =   end_logits.clamp_(0, ignored_idx)
             criterion.ignore_index = ignored_idx
 
-            start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1))
-            end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1))
+            start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1, MAX_QUERY_LENGTH))
+            end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1, MAX_QUERY_LENGTH))
             start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
             end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
 
@@ -332,8 +332,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             end_logits             =   end_logits.clamp_(0, ignored_idx)
             criterion.ignore_index = ignored_idx
 
-            start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1))
-            end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1))
+            start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1, MAX_QUERY_LENGTH))
+            end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1, MAX_QUERY_LENGTH))
             start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
             end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
 
@@ -385,8 +385,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 end_logits             =   end_logits.clamp_(0, ignored_idx)
                 criterion.ignore_index = ignored_idx
 
-                start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1))
-                end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1))
+                start_loss = criterion(start_logits.view(-1, MAX_QUERY_LENGTH), start_positions.view(-1, MAX_QUERY_LENGTH))
+                end_loss   = criterion(  end_logits.view(-1, MAX_QUERY_LENGTH),   end_positions.view(-1, MAX_QUERY_LENGTH))
                 start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
                 end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
 
