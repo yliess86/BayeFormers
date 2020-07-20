@@ -137,6 +137,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     writer      = SummaryWriter(writer_path + writer_suff)
 
     o_model, tokenizer = setup_model(MODEL_NAME, LOWER_CASE)
+    o_model            = o_model.to(DEVICE)
 
     squadv1       = {
         "max_seq_length"  : MAX_SEQ_LENGTH,
