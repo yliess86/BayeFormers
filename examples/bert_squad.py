@@ -53,11 +53,15 @@ def setup_model(model_name: str, lower_case: bool) -> Tuple[nn.Module, nn.Module
 
 
 def setup_squadv1_dataset(data_dir: str, tokenizer: nn.Module, test: bool = False, **kwargs) -> Dataset:
-    processor  = SquadV1Processor()
-    getter     = processor.get_dev_examples if test else processor.get_train_examples
-    fname      = f"{'dev' if test else 'train'}-v1.1.json"
-    examples   = getter(data_dir, fname)
-    _, dataset = squad_convert_examples_to_features(
+    cached_path = os.path.join(data_dir, f"{'dev' if test else 'train'}.pth")
+    if not os.path.isfile(cached_path):
+        return torch.load(cached_path)["dataset"] 
+    
+    processor   = SquadV1Processor()
+    getter      = processor.get_dev_examples if test else processor.get_train_examples
+    fname       = f"{'dev' if test else 'train'}-v1.1.json"
+    examples    = getter(data_dir, fname)
+    _, dataset  = squad_convert_examples_to_features(
         examples         = examples,
         tokenizer        = tokenizer,
         is_training      = not test,
@@ -65,6 +69,7 @@ def setup_squadv1_dataset(data_dir: str, tokenizer: nn.Module, test: bool = Fals
         **kwargs
     )
 
+    torch.save({ "dataset": dataset }, cached_path)
     return dataset
 
 
