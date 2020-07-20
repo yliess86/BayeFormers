@@ -10,7 +10,6 @@ from transformers import AutoModelForQuestionAnswering
 from transformers import AutoTokenizer
 from transformers import SquadV1Processor
 from transformers import squad_convert_examples_to_features
-from transformers.data.data_collator import default_data_collator as collate
 from transformers.optimization import AdamW
 from transformers.optimization import get_linear_schedule_with_warmup
 from tqdm import tqdm
@@ -142,8 +141,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     }
     train_dataset = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=False, **squadv1)
     test_dataset  = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=True,  **squadv1)
-    train_loader  = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate, **LOADER_OPTIONS)
-    test_loader   = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, **LOADER_OPTIONS)
+    train_loader  = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  **LOADER_OPTIONS)
+    test_loader   = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, **LOADER_OPTIONS)
 
     decay           = [param for name, param in o_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
     no_decay        = [param for name, param in o_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
