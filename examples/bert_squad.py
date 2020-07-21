@@ -423,9 +423,9 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--exp",           type=str,   default="exp",                     help="experience name for logs")
-    parser.add_argument("--model_name",    type=str,   default="distilbert-base-uncased", help="model name")
-    parser.add_argument("--device",        type=str,   default="cuda:0",                  help="device (cpu, cuda:0, ..., cuda:n)")
+    parser.add_argument("--exp",         type=str,   default="exp",                     help="experience name for logs")
+    parser.add_argument("--model_name",  type=str,   default="distilbert-base-uncased", help="model name")
+    parser.add_argument("--device",      type=str,   default="cuda:0",                  help="device (cpu, cuda:0, ..., cuda:n)")
 
     args = parser.parse_args()
 

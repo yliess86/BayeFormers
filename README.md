@@ -3,6 +3,8 @@
 General API for deep bayesian variationnal inference.
 Idealy designed to work with transformers like architectures.
 
+![Logo](https://raw.githubusercontent.com/yliess86/BayeFormers/master/BayeFormers.png)
+
 ## Setup
 
 Installation of the required python libraries is done through pip.
@@ -60,6 +62,7 @@ loss = (log_variational_posterior - log_prior) / n_batches + nll
 ```bash
 $ python3 -m examples.mlp_mnist
 $ python3 -m examples.bert_glue --help
+$ python3 -m examples.bert_squad --help
 ```
 
 ## References
