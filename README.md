@@ -3,7 +3,7 @@
 General API for deep bayesian variationnal inference.
 Idealy designed to work with transformers like architectures.
 
-![Logo](https://raw.githubusercontent.com/yliess86/BayeFormers/master/BayeFormers.png)
+![Logo](BayeFormers.png)
 
 ## Setup
 
