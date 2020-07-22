@@ -17,6 +17,7 @@ from typing import Dict
 from typing import Tuple
 
 import bayeformers.nn as bnn
+import numpy as np
 import os
 import torch
 import torch.nn as nn
@@ -30,6 +31,7 @@ class Report:
     def reset(self) -> None:
         self.total                    : float = 0.0
         self.acc                      : float = 0.0
+        self.acc_std                  : float = 0.0
         self.nll                      : float = 0.0
         self.log_prior                : float = 0.0
         self.log_variational_posterior: float = 0.0
@@ -53,7 +55,7 @@ def setup_model(model_name: str, task_name: str, n_labels: int) -> Tuple[nn.Modu
 
 def sample_bayesian(
     model: bnn.Model, inputs: Dict[str, torch.Tensor], samples: int, batch_size: int, n_labels: int, device: str
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     logits                    = torch.zeros(samples, batch_size, n_labels).to(device)
     log_prior                 = torch.zeros(samples, batch_size          ).to(device)
     log_variational_posterior = torch.zeros(samples, batch_size          ).to(device)
@@ -63,11 +65,12 @@ def sample_bayesian(
         log_prior[sample]                 = model.log_prior()
         log_variational_posterior[sample] = model.log_variational_posterior()
 
+    raw_logits                = logits
     logits                    = logits.mean(0).view(-1, n_labels)
     log_prior                 = log_prior.mean()
     log_variational_posterior = log_variational_posterior.mean()
 
-    return logits, log_prior, log_variational_posterior
+    return raw_logits, logits, log_prior, log_variational_posterior
 
 
 def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float, WEIGHT_DECAY: float, DEVICE: str) -> float:
@@ -176,17 +179,19 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
             B      = inputs["input_ids"].size(0)
 
             samples = sample_bayesian(b_model, inputs, SAMPLES, B, N_LABELS, DEVICE)
-            logits, log_prior, log_variational_posterior = samples
+            raw_logits, logits, log_prior, log_variational_posterior = samples
 
-            nll  = criterion(logits, labels.view(-1))            
-            loss = (log_variational_posterior - log_prior) / len(test_loader) + nll
-            acc  = (torch.argmax(logits, dim=1) == labels).float().sum()
+            nll     = criterion(logits, labels.view(-1))            
+            loss    = (log_variational_posterior - log_prior) / len(test_loader) + nll
+            acc     = (torch.argmax(logits, dim=1) == labels).float().sum()
+            acc_std = np.std([(torch.argmax(logits, dim=1) == labels).float().sum().item() for logits in raw_logits])
 
             report.total                     += loss.item()                      / len(test_loader)
             report.nll                       += nll.item()                       / len(test_loader)
             report.log_prior                 += log_prior.item()                 / len(test_loader)
             report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
             report.acc                       += acc.item() * 100                 / len(test_dataset)
+            report.acc_std                   += acc_std                          / len(test_loader)
 
             pbar.set_postfix(
                 total=report.total,
@@ -194,10 +199,12 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
                 log_prior=report.log_prior,
                 log_variational_posterior=report.log_variational_posterior,
                 acc=report.acc,
+                acc_std=report.acc_std,
             )
 
-    writer.add_scalar("bayesian_eval_nll", report.nll, epoch)
-    writer.add_scalar("bayesian_eval_acc", report.acc, epoch)
+    writer.add_scalar("bayesian_eval_nll",     report.nll,     epoch)
+    writer.add_scalar("bayesian_eval_acc",     report.acc,     epoch)
+    writer.add_scalar("bayesian_eval_acc_std", report.acc_std, epoch)
 
     decay           = [param for name, param in b_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
     no_decay        = [param for name, param in b_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
@@ -223,11 +230,12 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
 
             optim.zero_grad()
             samples = sample_bayesian(b_model, inputs, SAMPLES, B, N_LABELS, DEVICE)
-            logits, log_prior, log_variational_posterior = samples
+            raw_logits, logits, log_prior, log_variational_posterior = samples
 
-            nll  = criterion(logits, labels.view(-1))            
-            loss = (log_variational_posterior - log_prior) / len(train_loader) + nll
-            acc  = (torch.argmax(logits, dim=1) == labels).float().sum()
+            nll     = criterion(logits, labels.view(-1))            
+            loss    = (log_variational_posterior - log_prior) / len(train_loader) + nll
+            acc     = (torch.argmax(logits, dim=1) == labels).float().sum()
+            acc_std = np.std([(torch.argmax(logits, dim=1) == labels).float().sum().item() for logits in raw_logits])
 
             loss.backward()
             nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
@@ -238,6 +246,7 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
             report.log_prior                 += log_prior.item()                 / len(train_loader)
             report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
             report.acc                       += acc.item() * 100                 / len(train_dataset)
+            report.acc_std                   += acc_std                          / len(train_loader)
 
             pbar.set_postfix(
                 total=report.total,
@@ -245,11 +254,13 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
                 log_prior=report.log_prior,
                 log_variational_posterior=report.log_variational_posterior,
                 acc=report.acc,
+                acc_std=acc_std,
             )
 
         scheduler.step()
-        writer.add_scalar("bayesian_train_nll", report.nll, epoch)
-        writer.add_scalar("bayesian_train_acc", report.acc, epoch)
+        writer.add_scalar("bayesian_train_nll",     report.nll,     epoch)
+        writer.add_scalar("bayesian_train_acc",     report.acc,     epoch)
+        writer.add_scalar("bayesian_train_acc_std", report.acc_std, epoch)
 
         # ============================ TEST =======================================
         b_model.eval()
@@ -263,17 +274,19 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
                 B      = inputs["input_ids"].size(0)
 
                 samples = sample_bayesian(b_model, inputs, SAMPLES, B, N_LABELS, DEVICE)
-                logits, log_prior, log_variational_posterior = samples
+                raw_logits, logits, log_prior, log_variational_posterior = samples
 
-                nll  = criterion(logits, labels.view(-1))            
-                loss = (log_variational_posterior - log_prior) / len(test_loader) + nll
-                acc  = (torch.argmax(logits, dim=1) == labels).float().sum()
+                nll     = criterion(logits, labels.view(-1))
+                loss    = (log_variational_posterior - log_prior) / len(test_loader) + nll
+                acc     = (torch.argmax(logits, dim=1) == labels).float().sum()
+                acc_std = np.std([(torch.argmax(logits, dim=1) == labels).float().sum().item() for logits in raw_logits])
 
                 report.total                     += loss.item()                      / len(test_loader)
                 report.nll                       += nll.item()                       / len(test_loader)
                 report.log_prior                 += log_prior.item()                 / len(test_loader)
                 report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
                 report.acc                       += acc.item() * 100                 / len(test_dataset)
+                report.acc_std                   += acc_std                          / len(test_loader)
 
                 pbar.set_postfix(
                     total=report.total,
@@ -281,16 +294,19 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
                     log_prior=report.log_prior,
                     log_variational_posterior=report.log_variational_posterior,
                     acc=report.acc,
+                    acc_std=report.acc_std,
                 )
 
-        writer.add_scalar("bayesian_test_nll", report.nll, epoch)
-        writer.add_scalar("bayesian_test_acc", report.acc, epoch)
+        writer.add_scalar("bayesian_test_nll",     report.nll,     epoch)
+        writer.add_scalar("bayesian_test_acc",     report.acc,     epoch)
+        writer.add_scalar("bayesian_test_acc_std", report.acc_std, epoch)
 
     torch.save({
         "weight_decay": WEIGHT_DECAY,
-        "delta": DELTA,
-        "acc": report.acc,
-        "model": b_model.state_dict()
+        "delta"       : DELTA,
+        "acc"         : report.acc,
+        "acc_std"     : report.acc_std,
+        "model"       : b_model.state_dict()
     }, f"{writer_path + writer_suff}.pth")
 
     return report.acc
