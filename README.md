@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-General API for <b>Deep Bayesian Variationnal Inference by Backpropagation</b>.<br />The repository has been designed to work with <b>Transformers</b> like architectures.<br />Compatible with the <a href="https://huggingface.co/">HuggingFace Transformers</a> models.
+General API for <b>Deep Bayesian Variational Inference by Backpropagation</b>.<br />The repository has been designed to work with <b>Transformers</b> like architectures.<br />Compatible with the <a href="https://huggingface.co/">HuggingFace Transformers</a> models.
 </p>
 
 
