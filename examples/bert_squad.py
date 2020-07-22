@@ -58,13 +58,12 @@ def setup_squadv1_dataset(data_dir: str, tokenizer: nn.Module, test: bool = Fals
         return torch.load(cached_path)["dataset"] 
     
     processor   = SquadV1Processor()
-    getter      = processor.get_dev_examples if test else processor.get_train_examples
     fname       = f"{'dev' if test else 'train'}-v1.1.json"
-    examples    = getter(data_dir, fname)
+    examples    = processor.get_train_examples(data_dir, fname)
     _, dataset  = squad_convert_examples_to_features(
         examples         = examples,
         tokenizer        = tokenizer,
-        is_training      = not test,
+        is_training      = True,
         return_dataset   = "pt",
         **kwargs
     )
