@@ -1,9 +1,24 @@
-# BayeFormers
+<p align="center">
+    <img style="max-width: 648px;" alt="Logo" src=BayeFormers.png />
+</p>
 
-General API for deep bayesian variationnal inference.
-Idealy designed to work with transformers like architectures.
+<p align="center">
+    <a href="https://github.com/yliess86/BayeFormers/blob/master/LICENSE">
+        <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+    </a>
+    <a href="https://www.python.org/downloads/release/python-360/">
+        <img alt="Python 3.6+" src="https://img.shields.io/badge/python-3.6+-green.svg" />
+    </a>
+    <a href="https://pytorch.org/">
+        <img alt="Pytorch 1.4+" src="https://img.shields.io/badge/pytorch-1.4.0+-blue.svg" />
+    </a>
+</p>
 
-![Logo](BayeFormers.png)
+<p align="center">
+General API for <b>Deep Bayesian Variationnal Inference by Backpropagation</b>.<br />The repository has been designed to work with <b>Transformers</b> like architectures.<br />Compatible with the <a href="https://huggingface.co/">HuggingFace Transformers</a> models.
+</p>
+
+
 
 ## Setup
 
