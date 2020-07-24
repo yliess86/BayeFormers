@@ -165,7 +165,6 @@ def train(EXP: str, MODEL_NAME: str, TASK_NAME: str, N_LABELS: int, DELTA: float
 
     # ============================ EVALUTATION ====================================
     b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
-    b_model.model.classifier = bnn.Linear.from_frequentist(o_model.classifier)
     b_model                  = b_model.to(DEVICE)
 
     b_model.eval()

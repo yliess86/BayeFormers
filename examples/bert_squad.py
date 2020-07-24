@@ -250,7 +250,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
 
     # ============================ EVALUTATION ====================================
     b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
-    b_model.model.qa_outputs = bnn.Linear.from_frequentist(o_model.qa_outputs)
     b_model                  = b_model.to(DEVICE)
 
     b_model.eval()
