@@ -451,7 +451,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     hypersearch = HyperSearch()
-    hypersearch["DELTA"] = (1e-6, 1e-1)
+    hypersearch["DELTA"] = (1e-2, 1e-1)
     hypersearch["WEIGHT_DECAY"] = (1e-6, 1e-1)
     
     score = hypersearch.search(
