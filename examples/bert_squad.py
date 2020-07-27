@@ -452,7 +452,7 @@ if __name__ == "__main__":
 
     hypersearch = HyperSearch()
     hypersearch["DELTA"] = (1e-2, 1e-1)
-    hypersearch["WEIGHT_DECAY"] = (1e-6, 1e-1)
+    hypersearch["WEIGHT_DECAY"] = (1e-3, 0)
     
     score = hypersearch.search(
         train, iterations=10, EXP=args.exp, MODEL_NAME=args.model_name, DEVICE=args.device,
