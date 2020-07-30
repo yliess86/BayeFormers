@@ -93,19 +93,22 @@ def setup_squadv1_dataset(data_dir: str, tokenizer: nn.Module, test: bool = Fals
     return dataset, examples, features
 
 
-def setup_inputs(data: Iterable, model_name: str, model: nn.Module) -> Dict[str, torch.Tensor]:
+def setup_inputs(data: Iterable, model_name: str, model: nn.Module, test: bool = False) -> Dict[str, torch.Tensor]:
     inputs = {
         "input_ids"      : data[0],
         "attention_mask" : data[1],
         "token_type_ids" : data[2],
-        "start_positions": data[3],
-        "end_positions"  : data[4],
+        "start_positions": data[3] if not test else None,
+        "end_positions"  : data[4] if not test else None,
     }
 
     if ("xlm" in model_name) or ("roberta" in model_name) or ("distilbert" in model_name) or ("camembert" in model_name):
         del inputs["token_type_ids"]
     if ("xlnet" in model_name) or ("xlm" in model_name):
-        inputs.update({ "cls_index": data[5], "p_mask": data[6] })
+        inputs.update({
+            "cls_index": data[5] if not test else data[4],
+            "p_mask"   : data[6] if not test else data[5],
+        })
 
     return inputs
 
