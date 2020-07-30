@@ -481,8 +481,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     hypersearch = HyperSearch()
-    hypersearch["DELTA"] = (1e-2, 1e-1)
-    hypersearch["WEIGHT_DECAY"] = (1e-3, 0)
+    hypersearch["DELTA"] = ((1e-2, 1e-1), True)
+    hypersearch["WEIGHT_DECAY"] = ((1e-3, 0), False)
     
     score = hypersearch.search(
         train, iterations=10, EXP=args.exp, MODEL_NAME=args.model_name, DEVICE=args.device,
