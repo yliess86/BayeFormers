@@ -249,9 +249,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             for inputs in pbar:
                 inputs = setup_inputs(inputs, MODEL_NAME, o_model)
                 inputs = dic2cuda(inputs, DEVICE)
-                
-                start_positions = inputs["start_positions"]
-                end_positions   = inputs["end_positions"]
 
                 outputs      = o_model(**inputs)
                 start_logits = outputs[1]
@@ -260,23 +257,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 ignored_idx            = start_logits.size(1)
                 start_logits           = start_logits.clamp_(0, ignored_idx)
                 end_logits             =   end_logits.clamp_(0, ignored_idx)
-                criterion.ignore_index = ignored_idx
-
-                start_loss = criterion(start_logits, start_positions)
-                end_loss   = criterion(  end_logits,   end_positions)
-                start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
-                end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
-
-                loss = 0.5 * (start_loss + end_loss)
-                acc  = 0.5 * (start_acc  + end_acc)
-
-                report.total += loss.item()       / len(test_loader)
-                report.acc   += acc.item() * 100  / len(test_dataset)
-
-                pbar.set_postfix(total=report.total, acc=report.acc)
-
-        writer.add_scalar("test_nll", report.total, epoch)
-        writer.add_scalar("test_acc", report.acc,   epoch)
 
     # ============================ EVALUTATION ====================================
     b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
@@ -301,39 +281,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             ignored_idx            = start_logits.size(1)
             start_logits           = start_logits.clamp_(0, ignored_idx)
             end_logits             =   end_logits.clamp_(0, ignored_idx)
-            criterion.ignore_index = ignored_idx
 
-            start_loss    = criterion(start_logits, start_positions)
-            end_loss      = criterion(  end_logits,   end_positions)
-            start_acc     = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
-            end_acc       = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
-            start_acc_std = np.std([(torch.argmax(start_logits.clamp(0, ignored_idx), dim=1) == start_positions).float().sum().item() for start_logits in raw_start_logits])
-            end_acc_std   = np.std([(torch.argmax(  end_logits.clamp(0, ignored_idx), dim=1) ==   end_positions).float().sum().item() for   end_logits in raw_end_logits])
-
-            nll     = 0.5 * (start_loss    + end_loss)
-            acc     = 0.5 * (start_acc     + end_acc)
-            acc_std = 0.5 * (start_acc_std + end_acc_std)
-            loss    = (log_variational_posterior - log_prior) / len(test_loader) + nll
-
-            report.total                     += loss.item()                      / len(test_loader)
-            report.nll                       += nll.item()                       / len(test_loader)
-            report.log_prior                 += log_prior.item()                 / len(test_loader)
-            report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
-            report.acc                       += acc.item() * 100                 / len(test_dataset)
-            report.acc_std                   += acc_std                          / len(test_loader)
-
-            pbar.set_postfix(
-                total=report.total,
-                nll=report.nll,
-                log_prior=report.log_prior,
-                log_variational_posterior=report.log_variational_posterior,
-                acc=report.acc,
-                acc_std=report.acc_std,
-            )
-
-    writer.add_scalar("bayesian_eval_nll",     report.nll,     epoch)
-    writer.add_scalar("bayesian_eval_acc",     report.acc,     epoch)
-    writer.add_scalar("bayesian_eval_acc_std", report.acc_std, epoch)
+    # ============================ BAYESIAN ======================================
 
     decay           = [param for name, param in b_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
     no_decay        = [param for name, param in b_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
@@ -434,45 +383,12 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 ignored_idx            = start_logits.size(1)
                 start_logits           = start_logits.clamp_(0, ignored_idx)
                 end_logits             =   end_logits.clamp_(0, ignored_idx)
-                criterion.ignore_index = ignored_idx
 
-                start_loss    = criterion(start_logits, start_positions)
-                end_loss      = criterion(  end_logits,   end_positions)
-                start_acc     = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
-                end_acc       = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
-                start_acc_std = np.std([(torch.argmax(start_logits.clamp(0, ignored_idx), dim=1) == start_positions).float().sum().item() for start_logits in raw_start_logits])
-                end_acc_std   = np.std([(torch.argmax(  end_logits.clamp(0, ignored_idx), dim=1) ==   end_positions).float().sum().item() for   end_logits in raw_end_logits])
-
-                nll     = 0.5 * (start_loss    + end_loss)
-                acc     = 0.5 * (start_acc     + end_acc)
-                acc_std = 0.5 * (start_acc_std + end_acc_std)
-                loss    = (log_variational_posterior - log_prior) / len(test_loader) + nll
-
-                report.total                     += loss.item()                      / len(test_loader)
-                report.nll                       += nll.item()                       / len(test_loader)
-                report.log_prior                 += log_prior.item()                 / len(test_loader)
-                report.log_variational_posterior += log_variational_posterior.item() / len(test_loader)
-                report.acc                       += acc.item() * 100                 / len(test_dataset)
-                report.acc_std                   += acc_std                          / len(test_loader)
-
-                pbar.set_postfix(
-                    total=report.total,
-                    nll=report.nll,
-                    log_prior=report.log_prior,
-                    log_variational_posterior=report.log_variational_posterior,
-                    acc=report.acc,
-                    acc_std=report.acc_std,
-                )
-
-        writer.add_scalar("bayesian_test_nll",     report.nll,     epoch)
-        writer.add_scalar("bayesian_test_acc",     report.acc,     epoch)
-        writer.add_scalar("bayesian_test_acc_std", report.acc_std, epoch)
+    # ============================ SAVE =======================================
 
     torch.save({
         "weight_decay": WEIGHT_DECAY,
         "delta"       : DELTA,
-        "acc"         : report.acc,
-        "acc_std"     : report.acc_std,
         "model"       : b_model.state_dict()
     }, f"{writer_path + writer_suff}.pth")
 
