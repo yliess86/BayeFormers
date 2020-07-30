@@ -37,7 +37,7 @@ def f1_train(predicted_range: RangeTensor, target_range: RangeTensor) -> torch.T
 
     precision = overlap / (predicted_end - predicted_start + 1e-11).float()
     recall    = overlap / (target_end    - target_start + 1e-11).float()
-    f1        = 2 * precision * recall / (precision + recall)
+    f1        = 2 * precision * recall / (precision + recall + 1e-11)
     return f1
 
 
