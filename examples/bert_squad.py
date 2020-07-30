@@ -32,11 +32,11 @@ def f1_train(predicted_range: RangeTensor, target_range: RangeTensor) -> torch.T
     predicted_start, predicted_end = predicted_range
     target_start,    target_end    = target_range
     
-    overlap              = predicted_end - target_start
+    overlap              = (predicted_end - target_start).float()
     overlap[overlap < 0] = 0.0
 
-    precision = overlap / (predicted_end - predicted_start)
-    recall    = overlap / (target_end    - target_start)
+    precision = overlap / (predicted_end - predicted_start).float()
+    recall    = overlap / (target_end    - target_start).float()
     f1        = 2 * precision * recall / (precision + recall)
     return f1
 
@@ -216,7 +216,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             f1   = f1_train(
                 (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
                 (start_positions, end_positions)
-            ).float().mean()
+            ).mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(o_model.parameters(), MAX_GRAD_NORM)
@@ -377,7 +377,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             f1      = f1_train(
                 (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
                 (start_positions, end_positions)
-            ).float().mean()
+            ).mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
