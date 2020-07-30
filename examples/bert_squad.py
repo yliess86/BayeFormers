@@ -25,6 +25,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+RangeTensor = Tuple[torch.Tensor, torch.Tensor]
+
+
+def f1_train(predicted_range: RangeTensor, target_range: RangeTensor) -> torch.Tensor:
+    predicted_start, predicted_end = predicted_range
+    target_start,    target_end    = target_range
+    
+    overlap              = predicted_end - target_start
+    overlap[overlap < 0] = 0.0
+
+    precision = overlap / (predicted_end - predicted_start)
+    recall    = overlap / (target_end    - target_start)
+    f1        = 2 * precision * recall / (precision + recall)
+    return f1
+
+
 class Report:
     def __init__(self) -> None:
         self.reset()
@@ -36,6 +52,7 @@ class Report:
         self.nll                      : float = 0.0
         self.log_prior                : float = 0.0
         self.log_variational_posterior: float = 0.0
+        self.f1                       : float = 0.0
 
 
 def dic2cuda(dic: Dict, device: str) -> Dict:
@@ -196,6 +213,10 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
 
             loss = 0.5 * (start_loss + end_loss)
             acc  = 0.5 * (start_acc  + end_acc)
+            f1   = f1_train(
+                (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
+                (start_positions, end_positions)
+            ).mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(o_model.parameters(), MAX_GRAD_NORM)
@@ -203,12 +224,14 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
 
             report.total += loss.item()      / len(train_loader)
             report.acc   += acc.item() * 100 / len(train_dataset)
+            report.f1    += f1.item()        / len(train_loader)
 
-            pbar.set_postfix(total=report.total, acc=report.acc)
+            pbar.set_postfix(total=report.total, acc=report.acc, f1=report.f1)
 
         scheduler.step()
         writer.add_scalar("train_nll", report.total, epoch)
         writer.add_scalar("train_acc", report.acc,   epoch)
+        writer.add_scalar("train_f1",  report.f1,    epoch)
 
         # ============================ TEST =======================================
         o_model.eval()
@@ -351,6 +374,10 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             acc     = 0.5 * (start_acc     + end_acc)
             acc_std = 0.5 * (start_acc_std + end_acc_std)
             loss    = (log_variational_posterior - log_prior) / len(train_loader) + nll
+            f1      = f1_train(
+                (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
+                (start_positions, end_positions)
+            ).mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
@@ -362,6 +389,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
             report.acc                       += acc.item() * 100                 / len(train_dataset)
             report.acc_std                   += acc_std                          / len(train_loader)
+            report.f1                        += f1.item()                        / len(train_loader)
 
             pbar.set_postfix(
                 total=report.total,
@@ -370,12 +398,14 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 log_variational_posterior=report.log_variational_posterior,
                 acc=report.acc,
                 acc_std=report.acc_std,
+                f1=report.f1,
             )
 
         scheduler.step()
         writer.add_scalar("bayesian_train_nll",     report.nll,     epoch)
         writer.add_scalar("bayesian_train_acc",     report.acc,     epoch)
         writer.add_scalar("bayesian_train_acc_std", report.acc_std, epoch)
+        writer.add_scalar("bayesian_train_f1",      report.f1,      epoch)
 
         # ============================ TEST =======================================
         b_model.eval()
