@@ -216,7 +216,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             f1   = f1_train(
                 (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
                 (start_positions, end_positions)
-            ).mean()
+            ).float().mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(o_model.parameters(), MAX_GRAD_NORM)
@@ -377,7 +377,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             f1      = f1_train(
                 (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
                 (start_positions, end_positions)
-            ).mean()
+            ).float().mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
