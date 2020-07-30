@@ -270,17 +270,14 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         for inputs in pbar:
             inputs = setup_inputs(inputs, MODEL_NAME, o_model)
             inputs = dic2cuda(inputs, DEVICE)
-
-            start_positions = inputs["start_positions"]
-            end_positions   = inputs["end_positions"]
-            B               = inputs["input_ids"].size(0)
+            B      = inputs["input_ids"].size(0)
 
             samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
             raw_start_logits, raw_end_logits, start_logits, end_logits, log_prior, log_variational_posterior = samples
             
-            ignored_idx            = start_logits.size(1)
-            start_logits           = start_logits.clamp_(0, ignored_idx)
-            end_logits             =   end_logits.clamp_(0, ignored_idx)
+            ignored_idx  = start_logits.size(1)
+            start_logits = start_logits.clamp_(0, ignored_idx)
+            end_logits   =   end_logits.clamp_(0, ignored_idx)
 
     # ============================ BAYESIAN ======================================
 
@@ -372,17 +369,14 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             for inputs in pbar:
                 inputs = setup_inputs(inputs, MODEL_NAME, o_model)
                 inputs = dic2cuda(inputs, DEVICE)
-
-                start_positions = inputs["start_positions"]
-                end_positions   = inputs["end_positions"]
-                B               = inputs["input_ids"].size(0)
+                B      = inputs["input_ids"].size(0)
 
                 samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
                 raw_start_logits, raw_end_logits, start_logits, end_logits, log_prior, log_variational_posterior = samples
             
-                ignored_idx            = start_logits.size(1)
-                start_logits           = start_logits.clamp_(0, ignored_idx)
-                end_logits             =   end_logits.clamp_(0, ignored_idx)
+                ignored_idx  = start_logits.size(1)
+                start_logits = start_logits.clamp_(0, ignored_idx)
+                end_logits   =   end_logits.clamp_(0, ignored_idx)
 
     # ============================ SAVE =======================================
 
