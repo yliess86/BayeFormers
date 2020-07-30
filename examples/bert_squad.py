@@ -71,24 +71,26 @@ def setup_model(model_name: str, lower_case: bool) -> Tuple[nn.Module, nn.Module
     return model, tokenizer
 
 
-def setup_squadv1_dataset(data_dir: str, tokenizer: nn.Module, test: bool = False, **kwargs) -> Dataset:
+def setup_squadv1_dataset(data_dir: str, tokenizer: nn.Module, test: bool = False, **kwargs) -> Tuple[Dataset, torch.Tensor, torch.Tensor]:
     cached_path = os.path.join(data_dir, f"{'dev' if test else 'train'}v1.pth")
     if os.path.isfile(cached_path):
-        return torch.load(cached_path)["dataset"] 
+        ckpt = torch.load(cached_path)
+        return ckpt["dataset"], ckpt["examples"], ckpt["features"]
     
     processor   = SquadV1Processor()
     fname       = f"{'dev' if test else 'train'}-v1.1.json"
-    examples    = processor.get_train_examples(data_dir, fname)
-    _, dataset  = squad_convert_examples_to_features(
+    getter      = processor.get_dev_examples if test else processor.get_train_examples
+    examples    = getter(data_dir, fname)
+    features, dataset  = squad_convert_examples_to_features(
         examples         = examples,
         tokenizer        = tokenizer,
-        is_training      = True,
+        is_training      = not test,
         return_dataset   = "pt",
         **kwargs
     )
 
-    torch.save({ "dataset": dataset }, cached_path)
-    return dataset
+    torch.save({ "dataset": dataset, "examples": examples, "features": features }, cached_path)
+    return dataset, examples, features
 
 
 def setup_inputs(data: Iterable, model_name: str, model: nn.Module) -> Dict[str, torch.Tensor]:
@@ -165,8 +167,10 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         "max_query_length": MAX_QUERY_LENGTH,
         "threads"         : THREADS
     }
-    train_dataset = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=False, **squadv1)
-    test_dataset  = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=True,  **squadv1)
+    
+    train_dataset, train_examples, train_features = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=False, **squadv1)
+    test_dataset,  test_examples,  test_features  = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=True,  **squadv1)
+    
     train_loader  = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  **LOADER_OPTIONS)
     test_loader   = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, **LOADER_OPTIONS)
 
