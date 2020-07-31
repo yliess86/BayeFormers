@@ -10,6 +10,9 @@ from transformers import AutoModelForQuestionAnswering
 from transformers import AutoTokenizer
 from transformers import SquadV1Processor
 from transformers import squad_convert_examples_to_features
+from transformers.data.metrics.squad_metrics import compute_predictions_logits
+from transformers.data.metrics.squad_metrics import squad_evaluate
+from transformers.data.processors.squad import SquadResult
 from transformers.optimization import AdamW
 from transformers.optimization import get_linear_schedule_with_warmup
 from tqdm import tqdm
@@ -25,26 +28,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-RangeTensor = Tuple[torch.Tensor, torch.Tensor]
-EPS = 1e-11
-
-
-def f1_train(predicted_range: RangeTensor, target_range: RangeTensor) -> torch.Tensor:
-    predicted_start, predicted_end = predicted_range
-    target_start,    target_end    = target_range
-    
-    predicted_diff = (predicted_end - predicted_start).float() + EPS
-    target_diff    = (target_end    - target_start   ).float() + EPS
-
-    overlap              = (predicted_end - target_start).float()
-    overlap[overlap < 0] = 0.0
-
-    precision = overlap / predicted_diff
-    recall    = overlap / target_diff
-    f1        = 2 * precision * recall / (precision + recall + EPS)
-    return f1
-
-
 class Report:
     def __init__(self) -> None:
         self.reset()
@@ -56,6 +39,7 @@ class Report:
         self.nll                      : float = 0.0
         self.log_prior                : float = 0.0
         self.log_variational_posterior: float = 0.0
+        self.em                       : float = 0.0
         self.f1                       : float = 0.0
 
 
@@ -104,15 +88,17 @@ def setup_inputs(data: Iterable, model_name: str, model: nn.Module, test: bool =
         "token_type_ids" : data[2],
         "start_positions": data[3] if not test else None,
         "end_positions"  : data[4] if not test else None,
+        "feature_indices": None if not test else data[3],
     }
+
+    if test:
+        del inputs["start_positions"]
+        del inputs["end_positions"]
+    else:
+        del inputs["feature_indices"]
 
     if ("xlm" in model_name) or ("roberta" in model_name) or ("distilbert" in model_name) or ("camembert" in model_name):
         del inputs["token_type_ids"]
-    if ("xlnet" in model_name) or ("xlm" in model_name):
-        inputs.update({
-            "cls_index": data[5] if not test else data[4],
-            "p_mask"   : data[6] if not test else data[5],
-        })
 
     return inputs
 
@@ -143,22 +129,25 @@ def sample_bayesian(
 
 
 def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: str) -> float:
-    EPOCHS           = 5
-    BATCH_SIZE       = 8
-    SAMPLES          = 10
-    FREEZE           = True
-    LOGS             = "logs"
-    MAX_SEQ_LENGTH   = 384
-    DOC_STRIDE       = 128
-    MAX_QUERY_LENGTH = 64
-    LOWER_CASE       = True
-    THREADS          = 4
-    LOADER_OPTIONS   = { "num_workers": 6, "pin_memory": True }
-    LR               = 5e-5
-    ADAM_EPSILON     = 1e-8
-    N_WARMUP_STEPS   = 0
-    MAX_GRAD_NORM    = 1
-    DATA_DIR         = os.path.join("./dataset/squadv1")
+    EPOCHS            = 5
+    BATCH_SIZE        = 8
+    SAMPLES           = 10
+    FREEZE            = True
+    LOGS              = "logs"
+    DOC_STRIDE        = 128
+    MAX_SEQ_LENGTH    = 384
+    MAX_QUERY_LENGTH  = 64
+    MAX_ANSWER_LENGTH = 30
+    N_BEST_SIZE       = 20
+    NULL_SCORE_THRESH = 0.0
+    LOWER_CASE        = True
+    THREADS           = 4
+    LOADER_OPTIONS    = { "num_workers": 6, "pin_memory": True }
+    LR                = 5e-5
+    ADAM_EPSILON      = 1e-8
+    N_WARMUP_STEPS    = 0
+    MAX_GRAD_NORM     = 1
+    DATA_DIR          = os.path.join("./dataset/squadv1")
 
     os.makedirs(LOGS, exist_ok=True)
     writer_path = os.path.join(LOGS, f"bayeformers_bert_squad.{EXP}")
@@ -191,6 +180,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
     scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
 
+    # =========================== FREQUENTIST ==================================
+    
     report = Report()
     for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
@@ -224,10 +215,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
 
             loss = 0.5 * (start_loss + end_loss)
             acc  = 0.5 * (start_acc  + end_acc)
-            f1   = f1_train(
-                (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
-                (start_positions, end_positions)
-            ).mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(o_model.parameters(), MAX_GRAD_NORM)
@@ -235,32 +222,51 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
 
             report.total += loss.item()      / len(train_loader)
             report.acc   += acc.item() * 100 / len(train_dataset)
-            report.f1    += f1.item()        / len(train_loader)
 
-            pbar.set_postfix(total=report.total, acc=report.acc, f1=report.f1)
+            pbar.set_postfix(total=report.total, acc=report.acc)
 
         scheduler.step()
         writer.add_scalar("train_nll", report.total, epoch)
         writer.add_scalar("train_acc", report.acc,   epoch)
-        writer.add_scalar("train_f1",  report.f1,    epoch)
 
         # ============================ TEST =======================================
         o_model.eval()
         report.reset()
         
         with torch.no_grad():
-            pbar = tqdm(test_loader, desc="Test")
+            results = []
+            pbar    = tqdm(test_loader, desc="Test")
             for inputs in pbar:
                 inputs = setup_inputs(inputs, MODEL_NAME, o_model)
                 inputs = dic2cuda(inputs, DEVICE)
+                outputs = o_model(**inputs)
 
-                outputs      = o_model(**inputs)
-                start_logits = outputs[1]
-                end_logits   = outputs[2]
-                
-                ignored_idx            = start_logits.size(1)
-                start_logits           = start_logits.clamp_(0, ignored_idx)
-                end_logits             =   end_logits.clamp_(0, ignored_idx)
+                feature_indices = inputs["feature_indices"]
+                for i, feature_idx in enumerate(feature_indices):
+                    eval_feature             = test_features[feature_idx.item()]
+                    unique_id                = int(eval_feature.unique_id)
+                    output                   = [to_list(output[i]) for output in outputs]
+                    start_logits, end_logits = output
+                    result                   = SquadResult(unique_id, start_logits, end_logits)
+                    results.append(result)
+
+            predictions = compute_predictions_logits(
+                test_examples, test_features, results,
+                N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
+                os.path.join(LOGS, f"preds.frequentist.test.{writer_path + writer_suff}.json"),
+                os.path.join(LOGS, f"nbestpreds.frequentist.test.{writer_path + writer_suff}.json"),
+                None, True, False, NULL_SCORE_THRESH, tokenizer,
+            )
+
+            results      = squad_evaluate(test_examples, predictions)
+            report.em    = results["exact"]
+            report.f1    = results["f1"]
+            report.total = results["total"]
+            
+            pbar.set_postfix(em=report.em, f1=report.f1, total=report.total)
+            writer.add_scalar("test_em",    report.em,    epoch)
+            writer.add_scalar("test_f1",    report.f1,    epoch)
+            writer.add_scalar("test_total", report.total, epoch)
 
     # ============================ EVALUTATION ====================================
     b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
@@ -331,10 +337,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             acc     = 0.5 * (start_acc     + end_acc)
             acc_std = 0.5 * (start_acc_std + end_acc_std)
             loss    = (log_variational_posterior - log_prior) / len(train_loader) + nll
-            f1      = f1_train(
-                (torch.argmax(start_logits, dim=1), torch.argmax(end_logits, dim=1)),
-                (start_positions, end_positions)
-            ).mean()
 
             loss.backward()
             nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
@@ -346,7 +348,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
             report.acc                       += acc.item() * 100                 / len(train_dataset)
             report.acc_std                   += acc_std                          / len(train_loader)
-            report.f1                        += f1.item()                        / len(train_loader)
 
             pbar.set_postfix(
                 total=report.total,
@@ -355,14 +356,12 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 log_variational_posterior=report.log_variational_posterior,
                 acc=report.acc,
                 acc_std=report.acc_std,
-                f1=report.f1,
             )
 
         scheduler.step()
         writer.add_scalar("bayesian_train_nll",     report.nll,     epoch)
         writer.add_scalar("bayesian_train_acc",     report.acc,     epoch)
         writer.add_scalar("bayesian_train_acc_std", report.acc_std, epoch)
-        writer.add_scalar("bayesian_train_f1",      report.f1,      epoch)
 
         # ============================ TEST =======================================
         b_model.eval()
