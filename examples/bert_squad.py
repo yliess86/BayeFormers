@@ -150,7 +150,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     DATA_DIR          = os.path.join("./dataset/squadv1")
 
     os.makedirs(LOGS, exist_ok=True)
-    writer_path = os.path.join(LOGS, f"bayeformers_bert_squad.{EXP}")
+    writer_name = f"bayeformers_bert_squad.{EXP}"
+    writer_path = os.path.join(LOGS, writer_name)
     writer_suff = f".DELTA_{DELTA}.WEIGHT_DECAY_{WEIGHT_DECAY}"
     writer      = SummaryWriter(writer_path + writer_suff)
 
@@ -253,8 +254,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             predictions = compute_predictions_logits(
                 test_examples, test_features, results,
                 N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
-                os.path.join(LOGS, f"preds.frequentist.test.{writer_path + writer_suff}.json"),
-                os.path.join(LOGS, f"nbestpreds.frequentist.test.{writer_path + writer_suff}.json"),
+                os.path.join(LOGS, f"preds.frequentist.test.{writer_name + writer_suff}.json"),
+                os.path.join(LOGS, f"nbestpreds.frequentist.test.{writer_name + writer_suff}.json"),
                 None, True, False, NULL_SCORE_THRESH, tokenizer,
             )
 
