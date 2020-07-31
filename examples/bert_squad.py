@@ -277,18 +277,41 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     report.reset()
 
     with torch.no_grad():
-        pbar = tqdm(test_loader, desc="Bayesian Eval")
+        results = []
+        pbar    = tqdm(test_loader, desc="Bayesian Eval")
         for inputs in pbar:
-            inputs = setup_inputs(inputs, MODEL_NAME, o_model)
-            inputs = dic2cuda(inputs, DEVICE)
-            B      = inputs["input_ids"].size(0)
-
+            inputs  = setup_inputs(inputs, MODEL_NAME, o_model)
+            inputs  = dic2cuda(inputs, DEVICE)
+            B       = inputs["input_ids"].size(0)
             samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
-            raw_start_logits, raw_end_logits, start_logits, end_logits, log_prior, log_variational_posterior = samples
+            _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
             
-            ignored_idx  = start_logits.size(1)
-            start_logits = start_logits.clamp_(0, ignored_idx)
-            end_logits   =   end_logits.clamp_(0, ignored_idx)
+            feature_indices = inputs["feature_indices"]
+            for i, feature_idx in enumerate(feature_indices):
+                eval_feature             = test_features[feature_idx.item()]
+                unique_id                = int(eval_feature.unique_id)
+                output                   = [to_list(output[i]) for output in outputs]
+                start_logits, end_logits = output
+                result                   = SquadResult(unique_id, start_logits, end_logits)
+                results.append(result)
+
+        predictions = compute_predictions_logits(
+            test_examples, test_features, results,
+            N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
+            os.path.join(LOGS, f"preds.bayesian.eval.{writer_name + writer_suff}.json"),
+            os.path.join(LOGS, f"nbestpreds.bayesian.eval.{writer_name + writer_suff}.json"),
+            None, True, False, NULL_SCORE_THRESH, tokenizer,
+        )
+
+        results      = squad_evaluate(test_examples, predictions)
+        report.em    = results["exact"]
+        report.f1    = results["f1"]
+        report.total = results["total"]
+        
+        pbar.set_postfix(em=report.em, f1=report.f1, total=report.total)
+        writer.add_scalar("bayesian_eval_em",    report.em,    epoch)
+        writer.add_scalar("bayesian_eval_f1",    report.f1,    epoch)
+        writer.add_scalar("bayesian_eval_total", report.total, epoch)
 
     # ============================ BAYESIAN ======================================
 
@@ -369,25 +392,51 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         report.reset()
         
         with torch.no_grad():
-            pbar = tqdm(test_loader, desc="Bayesian Test")
+            results = []
+            pbar    = tqdm(test_loader, desc="Bayesian Test")
             for inputs in pbar:
-                inputs = setup_inputs(inputs, MODEL_NAME, o_model)
-                inputs = dic2cuda(inputs, DEVICE)
-                B      = inputs["input_ids"].size(0)
-
+                inputs  = setup_inputs(inputs, MODEL_NAME, o_model)
+                inputs  = dic2cuda(inputs, DEVICE)
+                B       = inputs["input_ids"].size(0)
                 samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
-                raw_start_logits, raw_end_logits, start_logits, end_logits, log_prior, log_variational_posterior = samples
+                _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
+                
+                feature_indices = inputs["feature_indices"]
+                for i, feature_idx in enumerate(feature_indices):
+                    eval_feature             = test_features[feature_idx.item()]
+                    unique_id                = int(eval_feature.unique_id)
+                    output                   = [to_list(output[i]) for output in outputs]
+                    start_logits, end_logits = output
+                    result                   = SquadResult(unique_id, start_logits, end_logits)
+                    results.append(result)
+
+            predictions = compute_predictions_logits(
+                test_examples, test_features, results,
+                N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
+                os.path.join(LOGS, f"preds.bayesian.test.{writer_name + writer_suff}.json"),
+                os.path.join(LOGS, f"nbestpreds.bayesian.test.{writer_name + writer_suff}.json"),
+                None, True, False, NULL_SCORE_THRESH, tokenizer,
+            )
+
+            results      = squad_evaluate(test_examples, predictions)
+            report.em    = results["exact"]
+            report.f1    = results["f1"]
+            report.total = results["total"]
             
-                ignored_idx  = start_logits.size(1)
-                start_logits = start_logits.clamp_(0, ignored_idx)
-                end_logits   =   end_logits.clamp_(0, ignored_idx)
+            pbar.set_postfix(em=report.em, f1=report.f1, total=report.total)
+            writer.add_scalar("bayesian_test_em",    report.em,    epoch)
+            writer.add_scalar("bayesian_test_f1",    report.f1,    epoch)
+            writer.add_scalar("bayesian_test_total", report.total, epoch)
 
     # ============================ SAVE =======================================
 
     torch.save({
         "weight_decay": WEIGHT_DECAY,
         "delta"       : DELTA,
-        "model"       : b_model.state_dict()
+        "model"       : b_model.state_dict(),
+        "em"          : report.em,
+        "f1"          : report.f1,
+        "total"       : report.total,
     }, f"{writer_path + writer_suff}.pth")
 
     return report.acc
