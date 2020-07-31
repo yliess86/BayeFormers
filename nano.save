@@ -1,0 +1,5 @@
+PaintsTorch is an AI-Powerd Automatic Colorizer. Given one anime lineart and color hints, it uses State of the Art Deep Learning techniques to produce a high-quality illustration. PaintsTorch has been published at the 2019 CVMP venue in London.
+
+Automatic lineart colorization is a challenging task for computer vision as black-and-white linearts lack semantic information such as lighting and texture.
+
+This tool is not limited to anime linearts only. It can be further refined and applied to other domains such as animation, architectural drawing, fashion design, procedural video game content, and much more.

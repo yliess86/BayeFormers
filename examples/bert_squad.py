@@ -238,7 +238,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             results = []
             pbar    = tqdm(test_loader, desc="Test")
             for inputs in pbar:
-                inputs = setup_inputs(inputs, MODEL_NAME, o_model)
+                inputs = setup_inputs(inputs, MODEL_NAME, o_model, True)
                 inputs = dic2cuda(inputs, DEVICE)
                 outputs = o_model(**inputs)
 
@@ -280,7 +280,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         results = []
         pbar    = tqdm(test_loader, desc="Bayesian Eval")
         for inputs in pbar:
-            inputs  = setup_inputs(inputs, MODEL_NAME, o_model)
+            inputs  = setup_inputs(inputs, MODEL_NAME, o_model, True)
             inputs  = dic2cuda(inputs, DEVICE)
             B       = inputs["input_ids"].size(0)
             samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
@@ -395,7 +395,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             results = []
             pbar    = tqdm(test_loader, desc="Bayesian Test")
             for inputs in pbar:
-                inputs  = setup_inputs(inputs, MODEL_NAME, o_model)
+                inputs  = setup_inputs(inputs, MODEL_NAME, o_model, True)
                 inputs  = dic2cuda(inputs, DEVICE)
                 B       = inputs["input_ids"].size(0)
                 samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
