@@ -26,18 +26,22 @@ import torch.nn.functional as F
 
 
 RangeTensor = Tuple[torch.Tensor, torch.Tensor]
+EPS = 1e-11
 
 
 def f1_train(predicted_range: RangeTensor, target_range: RangeTensor) -> torch.Tensor:
     predicted_start, predicted_end = predicted_range
     target_start,    target_end    = target_range
     
+    predicted_diff = (predicted_end - predicted_start).float() + EPS
+    target_diff    = (target_end    - target_start   ).float() + EPS
+
     overlap              = (predicted_end - target_start).float()
     overlap[overlap < 0] = 0.0
 
-    precision = overlap / (predicted_end - predicted_start + 1e-11).float()
-    recall    = overlap / (target_end    - target_start + 1e-11).float()
-    f1        = 2 * precision * recall / (precision + recall + 1e-11)
+    precision = overlap / predicted_diff
+    recall    = overlap / target_diff
+    f1        = 2 * precision * recall / (precision + recall + EPS)
     return f1
 
 
