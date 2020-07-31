@@ -238,11 +238,13 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             results = []
             pbar    = tqdm(test_loader, desc="Test")
             for inputs in pbar:
-                inputs = setup_inputs(inputs, MODEL_NAME, o_model, True)
-                inputs = dic2cuda(inputs, DEVICE)
+                inputs          = setup_inputs(inputs, MODEL_NAME, o_model, True)
+                inputs          = dic2cuda(inputs, DEVICE)
+                feature_indices = inputs["feature_indices"]
+                
+                del inputs["feature_indices"]
                 outputs = o_model(**inputs)
 
-                feature_indices = inputs["feature_indices"]
                 for i, feature_idx in enumerate(feature_indices):
                     eval_feature             = test_features[feature_idx.item()]
                     unique_id                = int(eval_feature.unique_id)
@@ -280,9 +282,12 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
         results = []
         pbar    = tqdm(test_loader, desc="Bayesian Eval")
         for inputs in pbar:
-            inputs  = setup_inputs(inputs, MODEL_NAME, o_model, True)
-            inputs  = dic2cuda(inputs, DEVICE)
-            B       = inputs["input_ids"].size(0)
+            inputs          = setup_inputs(inputs, MODEL_NAME, o_model, True)
+            inputs          = dic2cuda(inputs, DEVICE)
+            feature_indices = inputs["feature_indices"]
+            B               = inputs["input_ids"].size(0)
+
+            del inputs["feature_indices"]
             samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
             _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
             
@@ -395,13 +400,15 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             results = []
             pbar    = tqdm(test_loader, desc="Bayesian Test")
             for inputs in pbar:
-                inputs  = setup_inputs(inputs, MODEL_NAME, o_model, True)
-                inputs  = dic2cuda(inputs, DEVICE)
-                B       = inputs["input_ids"].size(0)
+                inputs          = setup_inputs(inputs, MODEL_NAME, o_model, True)
+                inputs          = dic2cuda(inputs, DEVICE)
+                feature_indices = inputs["feature_indices"]
+                B               = inputs["input_ids"].size(0)
+
+                del inputs["feature_indices"]
                 samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
                 _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
                 
-                feature_indices = inputs["feature_indices"]
                 for i, feature_idx in enumerate(feature_indices):
                     eval_feature             = test_features[feature_idx.item()]
                     unique_id                = int(eval_feature.unique_id)
