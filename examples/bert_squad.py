@@ -43,6 +43,10 @@ class Report:
         self.f1                       : float = 0.0
 
 
+def to_list(tensor: torch.Tensor) -> List[torch.Tensor]:
+    return tensor.detach().cpu().tolist()
+
+
 def dic2cuda(dic: Dict, device: str) -> Dict:
     for key, value in dic.items():
         if isinstance(value, torch.Tensor):
