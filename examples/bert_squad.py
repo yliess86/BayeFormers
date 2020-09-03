@@ -118,8 +118,8 @@ def sample_bayesian(
 
     for sample in range(samples):
         outputs                           = model(**inputs)
-        start_logits[sample]              = outputs[1]
-        end_logits[sample]                = outputs[2]
+        start_logits[sample]              = outputs[-2]
+        end_logits[sample]                = outputs[-1]
         log_prior[sample]                 = model.log_prior()
         log_variational_posterior[sample] = model.log_variational_posterior()
 
