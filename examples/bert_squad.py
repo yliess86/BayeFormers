@@ -18,6 +18,7 @@ from transformers.optimization import get_linear_schedule_with_warmup
 from tqdm import tqdm
 from typing import Dict
 from typing import Iterable
+from typing import List
 from typing import Tuple
 
 import bayeformers.nn as bnn
