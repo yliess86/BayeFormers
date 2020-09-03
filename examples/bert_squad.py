@@ -296,7 +296,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
             _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
             
-            feature_indices = inputs["feature_indices"]
             for i, feature_idx in enumerate(feature_indices):
                 eval_feature             = test_features[feature_idx.item()]
                 unique_id                = int(eval_feature.unique_id)
