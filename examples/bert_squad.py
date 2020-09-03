@@ -300,8 +300,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             for i, feature_idx in enumerate(feature_indices):
                 eval_feature             = test_features[feature_idx.item()]
                 unique_id                = int(eval_feature.unique_id)
-                output                   = [to_list(output[i]) for output in outputs]
-                start_logits, end_logits = output
                 result                   = SquadResult(unique_id, start_logits, end_logits)
                 results.append(result)
 
@@ -417,8 +415,6 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 for i, feature_idx in enumerate(feature_indices):
                     eval_feature             = test_features[feature_idx.item()]
                     unique_id                = int(eval_feature.unique_id)
-                    output                   = [to_list(output[i]) for output in outputs]
-                    start_logits, end_logits = output
                     result                   = SquadResult(unique_id, start_logits, end_logits)
                     results.append(result)
 
