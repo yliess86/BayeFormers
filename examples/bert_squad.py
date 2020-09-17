@@ -164,7 +164,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     o_model, tokenizer = setup_model(MODEL_NAME, LOWER_CASE)
     o_model            = o_model.to(DEVICE)
 
-    squadv1       = {
+    squadv1 = {
         "max_seq_length"  : MAX_SEQ_LENGTH,
         "doc_stride"      : DOC_STRIDE,
         "max_query_length": MAX_QUERY_LENGTH,
@@ -173,9 +173,9 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     
     train_dataset, train_examples, train_features = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=False, **squadv1)
     test_dataset,  test_examples,  test_features  = setup_squadv1_dataset(DATA_DIR, tokenizer=tokenizer, test=True,  **squadv1)
-    
-    train_loader  = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  **LOADER_OPTIONS)
-    test_loader   = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, **LOADER_OPTIONS)
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  **LOADER_OPTIONS)
+    test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, **LOADER_OPTIONS)
 
     decay           = [param for name, param in o_model.named_parameters() if name     in ["bias", "LayerNorm.weight"]]
     no_decay        = [param for name, param in o_model.named_parameters() if name not in ["bias", "LayerNorm.weight"]]
@@ -278,8 +278,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             writer.add_scalar("test_total", report.total, epoch)
 
     # ============================ EVALUTATION ====================================
-    b_model                  = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
-    b_model                  = b_model.to(DEVICE)
+    b_model = to_bayesian(o_model, delta=DELTA, freeze=FREEZE)
+    b_model = b_model.to(DEVICE)
 
     b_model.eval()
     report.reset()
@@ -298,9 +298,9 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
             
             for i, feature_idx in enumerate(feature_indices):
-                eval_feature             = test_features[feature_idx.item()]
-                unique_id                = int(eval_feature.unique_id)
-                result                   = SquadResult(unique_id, start_logits, end_logits)
+                eval_feature = test_features[feature_idx.item()]
+                unique_id    = int(eval_feature.unique_id)
+                result       = SquadResult(unique_id, start_logits[:, i], end_logits[:, i])
                 results.append(result)
 
         predictions = compute_predictions_logits(
@@ -413,9 +413,9 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
                 
                 for i, feature_idx in enumerate(feature_indices):
-                    eval_feature             = test_features[feature_idx.item()]
-                    unique_id                = int(eval_feature.unique_id)
-                    result                   = SquadResult(unique_id, start_logits, end_logits)
+                    eval_feature = test_features[feature_idx.item()]
+                    unique_id    = int(eval_feature.unique_id)
+                    result       = SquadResult(unique_id, start_logits[:, i], end_logits[:, i])
                     results.append(result)
 
             predictions = compute_predictions_logits(
