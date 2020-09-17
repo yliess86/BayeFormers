@@ -20,6 +20,7 @@ from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Tuple
+from torch import Tensor
 
 import bayeformers.nn as bnn
 import numpy as np
@@ -111,10 +112,10 @@ def setup_inputs(data: Iterable, model_name: str, model: nn.Module, test: bool =
 def sample_bayesian(
     model: bnn.Model, inputs: Dict[str, torch.Tensor], samples: int, batch_size: int, max_seq_len: int, device: str
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    start_logits              = torch.zeros(samples, batch_size, max_seq_len).to(device)
-    end_logits                = torch.zeros(samples, batch_size, max_seq_len).to(device)
-    log_prior                 = torch.zeros(samples, batch_size             ).to(device)
-    log_variational_posterior = torch.zeros(samples, batch_size             ).to(device)
+    start_logits               : torch.Tensor     = torch.zeros(samples, batch_size, max_seq_len).to(device)
+    end_logits                 : torch.Tensor     = torch.zeros(samples, batch_size, max_seq_len).to(device)
+    log_prior                  : torch.Tensor     = torch.zeros(samples, batch_size             ).to(device)
+    log_variational_posterior  : torch.Tensor     = torch.zeros(samples, batch_size             ).to(device)
 
     for sample in range(samples):
         outputs                           = model(**inputs)
@@ -125,8 +126,8 @@ def sample_bayesian(
 
     raw_start_logits          = start_logits
     raw_end_logits            = end_logits
-    start_logits              = start_logits.mean(0)
-    end_logits                = end_logits.mean(0)
+    start_logits              = start_logits.mean(0).to_list()
+    end_logits                = end_logits.mean(0).to_list()
     log_prior                 = log_prior.mean()
     log_variational_posterior = log_variational_posterior.mean()
 
