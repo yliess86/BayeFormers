@@ -126,8 +126,8 @@ def sample_bayesian(
 
     raw_start_logits          = start_logits
     raw_end_logits            = end_logits
-    start_logits              = start_logits.mean(0).to_list()
-    end_logits                = end_logits.mean(0).to_list()
+    start_logits              = start_logits.mean(0).tolist()
+    end_logits                = end_logits.mean(0).tolist()
     log_prior                 = log_prior.mean()
     log_variational_posterior = log_variational_posterior.mean()
 
