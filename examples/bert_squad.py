@@ -21,6 +21,8 @@ from typing import Iterable
 from typing import List
 from typing import Tuple
 from torch import Tensor
+import random
+import json
 
 import bayeformers.nn as bnn
 import numpy as np
@@ -43,7 +45,82 @@ class Report:
         self.em                       : float = 0.0
         self.f1                       : float = 0.0
 
+class Section:
+    def __init__(self, parent: "Section", name : str = None):
+        self.parent = parent
+        self.data   = {}
 
+    def __setitem__(self, key, value):
+        # if self.not_leaf:
+        #     raise Exception("Cannot store in non-leaf node")
+        self.data[key] = value
+
+    def is_root(self):
+        return self.parent == None
+
+    def sub_section(self, name = None) -> "Section":
+        if not name:
+            if len(self.data) == 0:
+                self.data = []
+            else:
+                raise Exception("Cannot make a non empty node a data node")
+            sub = Section(self) # Data node
+            self.data.append(sub)
+            return sub
+        if name in self.data:
+            raise Exception("Got same section name, this would erase data")
+        s = Section(self)
+        self.data[name] = s
+        return s
+
+    def __repr__(self):
+        return repr(self.data)
+
+
+class Dumper:
+    
+    def __init__(self, filename: str = None) -> None:
+        if not finename:
+            filename = f'unnamed.dump'
+        self.original_filename : str = filename
+        self.filename : str = filename
+        if os.exists(self.filename):
+            raise Exception("Dump file already exists")
+        if not os.access(self.filename, os.W_OK):
+            raise Exception("Access denied to create file")
+
+        self.root_section    = Section(None)
+        self.current_section = self.root_section
+
+    def __call__(self, name: str = None, value = None):
+        section_name = name
+        if name and value:
+            section_name += f'={value}'
+        self.current_section = self.current_section.sub_section(section_name)
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.current_section = self.current_section.parent
+        if not self.current_section:
+            self.dump()
+
+    def dump(self):
+        posfix = "".join([random.choice(string.ascii_letters + string.digits) for n in range(5)]).upper()
+        self.filename = f'{self.original_filename}.{self.section_name}.{postfix}'
+        print("Dumping results")
+        with open(self.filename, 'w+') as fh:
+            fh.write(repr(self.root_section))
+        print("Done dumping results")
+
+    def __setitem__(self, name: str, value):
+        if type(value) == torch.Tensor:
+            value = value.tolist()
+        self.current_section[name] = value
+
+    
 def to_list(tensor: torch.Tensor) -> List[torch.Tensor]:
     return tensor.detach().cpu().tolist()
 
@@ -154,6 +231,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     MAX_GRAD_NORM     = 1
     DATA_DIR          = os.path.join("./dataset/squadv1")
 
+    dumper = Dumper(f'dumps/dump_{EXP}_{MODEL_NAME}_{DELTA}.dump')
+
     os.makedirs(LOGS, exist_ok=True)
     writer_name = f"bayeformers_bert_squad.{EXP}"
     writer_path = os.path.join(LOGS, writer_name)
@@ -190,89 +269,103 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     # =========================== FREQUENTIST ==================================
     
     report = Report()
-    for epoch in tqdm(range(EPOCHS), desc="Epoch"):
+    with dumper("frequentist_train"):
+        for epoch in tqdm(range(EPOCHS), desc="Epoch"):
 
-        # ============================ TRAIN ======================================
-        o_model.train()
-        report.reset()
-        
-        pbar = tqdm(train_loader, desc="Train")
-        for inputs in pbar:
-            inputs = setup_inputs(inputs, MODEL_NAME, o_model)
-            inputs = dic2cuda(inputs, DEVICE)
-            
-            start_positions = inputs["start_positions"]
-            end_positions   = inputs["end_positions"]
+            # ============================ TRAIN ======================================
+            o_model.train()
+            report.reset()
 
-            optim.zero_grad()
-            
-            outputs      = o_model(**inputs)
-            start_logits = outputs[1]
-            end_logits   = outputs[2]
-            
-            ignored_idx            = start_logits.size(1)
-            start_logits           = start_logits.clamp_(0, ignored_idx)
-            end_logits             = end_logits.clamp_(0, ignored_idx)
-            criterion.ignore_index = ignored_idx
+            with dumper("epoch", epoch):
+                pbar = tqdm(train_loader, desc="Train")
+                for inputs in pbar:
+                    inputs = setup_inputs(inputs, MODEL_NAME, o_model)
+                    inputs = dic2cuda(inputs, DEVICE)
+                    
+                    start_positions = inputs["start_positions"]
+                    end_positions   = inputs["end_positions"]
 
-            start_loss = criterion(start_logits, start_positions)
-            end_loss   = criterion(  end_logits,   end_positions)
-            start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
-            end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
+                    optim.zero_grad()
+                    
+                    outputs      = o_model(**inputs)
+                    start_logits = outputs[1]
+                    end_logits   = outputs[2]
+                    
+                    ignored_idx            = start_logits.size(1)
+                    start_logits           = start_logits.clamp_(0, ignored_idx)
+                    end_logits             = end_logits.clamp_(0, ignored_idx)
+                    criterion.ignore_index = ignored_idx
 
-            loss = 0.5 * (start_loss + end_loss)
-            acc  = 0.5 * (start_acc  + end_acc)
+                    with dumper():
+                        dumper['start_positions'] = start_positions
+                        dumper['end_positions']   = end_positions
+                        dumper['start_logits']    = start_logits
+                        dumper['end_logits']      = end_logits
 
-            loss.backward()
-            nn.utils.clip_grad_norm_(o_model.parameters(), MAX_GRAD_NORM)
-            optim.step()
+                    start_loss = criterion(start_logits, start_positions)
+                    end_loss   = criterion(  end_logits,   end_positions)
+                    start_acc  = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
+                    end_acc    = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
 
-            report.total += loss.item()      / len(train_loader)
-            report.acc   += acc.item() * 100 / len(train_dataset)
+                    loss = 0.5 * (start_loss + end_loss)
+                    acc  = 0.5 * (start_acc  + end_acc)
 
-            pbar.set_postfix(total=report.total, acc=report.acc)
+                    loss.backward()
+                    nn.utils.clip_grad_norm_(o_model.parameters(), MAX_GRAD_NORM)
+                    optim.step()
 
-        scheduler.step()
-        writer.add_scalar("train_nll", report.total, epoch)
-        writer.add_scalar("train_acc", report.acc,   epoch)
+                    report.total += loss.item()      / len(train_loader)
+                    report.acc   += acc.item() * 100 / len(train_dataset)
+
+                    pbar.set_postfix(total=report.total, acc=report.acc)
+
+            scheduler.step()
+            writer.add_scalar("train_nll", report.total, epoch)
+            writer.add_scalar("train_acc", report.acc,   epoch)
 
         # ============================ TEST =======================================
         o_model.eval()
         report.reset()
         
-        with torch.no_grad():
-            results = []
-            pbar    = tqdm(test_loader, desc="Test")
-            for inputs in pbar:
-                inputs          = setup_inputs(inputs, MODEL_NAME, o_model, True)
-                inputs          = dic2cuda(inputs, DEVICE)
-                feature_indices = inputs["feature_indices"]
-                
-                del inputs["feature_indices"]
-                outputs = o_model(**inputs)
+        with dumper.section("frequentist_test"):
+            with torch.no_grad():
+                results = []
+                pbar    = tqdm(test_loader, desc="Test")
+                for inputs in pbar:
+                    inputs          = setup_inputs(inputs, MODEL_NAME, o_model, True)
+                    inputs          = dic2cuda(inputs, DEVICE)
+                    feature_indices = inputs["feature_indices"]
+                    
+                    del inputs["feature_indices"]
+                    outputs = o_model(**inputs)
 
-                for i, feature_idx in enumerate(feature_indices):
-                    eval_feature             = test_features[feature_idx.item()]
-                    unique_id                = int(eval_feature.unique_id)
-                    output                   = [to_list(output[i]) for output in outputs]
-                    start_logits, end_logits = output
-                    result                   = SquadResult(unique_id, start_logits, end_logits)
-                    results.append(result)
+                    for i, feature_idx in enumerate(feature_indices):
+                        eval_feature             = test_features[feature_idx.item()]
+                        unique_id                = int(eval_feature.unique_id)
+                        output                   = [to_list(output[i]) for output in outputs]
+                        start_logits, end_logits = output
+                        result                   = SquadResult(unique_id, start_logits, end_logits)
+                        results.append(result)
+                        
+                        with dumper():
+                            dumper['unique_id']     = unique_id
+                            dumper['start_logits']  = start_logits
+                            dumper['end_logits']    = end_logits
 
-            predictions = compute_predictions_logits(
-                test_examples, test_features, results,
-                N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
-                os.path.join(LOGS, f"preds.frequentist.test.{writer_name + writer_suff}.json"),
-                os.path.join(LOGS, f"nbestpreds.frequentist.test.{writer_name + writer_suff}.json"),
-                None, True, False, NULL_SCORE_THRESH, tokenizer,
-            )
+                predictions = compute_predictions_logits(
+                    test_examples, test_features, results,
+                    N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
+                    os.path.join(LOGS, f"preds.frequentist.test.{writer_name + writer_suff}.json"),
+                    os.path.join(LOGS, f"nbestpreds.frequentist.test.{writer_name + writer_suff}.json"),
+                    None, True, False, NULL_SCORE_THRESH, tokenizer,
+                )
 
             results      = squad_evaluate(test_examples, predictions)
             report.em    = results["exact"]
             report.f1    = results["f1"]
             report.total = results["total"]
             
-            pbar.set_postfix(em=report.em, f1=report.f1, total=report.total)
+            print(f'em={report.em}, f1={report.f1}, total={report.total}')
             writer.add_scalar("test_em",    report.em,    epoch)
             writer.add_scalar("test_f1",    report.f1,    epoch)
             writer.add_scalar("test_total", report.total, epoch)
@@ -284,42 +377,51 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     b_model.eval()
     report.reset()
 
-    with torch.no_grad():
-        results = []
-        pbar    = tqdm(test_loader, desc="Bayesian Eval")
-        for inputs in pbar:
-            inputs          = setup_inputs(inputs, MODEL_NAME, o_model, True)
-            inputs          = dic2cuda(inputs, DEVICE)
-            feature_indices = inputs["feature_indices"]
-            B               = inputs["input_ids"].size(0)
+    with dumper("bayesian_eval_before_train"):
+        with torch.no_grad():
+            results = []
+            pbar    = tqdm(test_loader, desc="Bayesian Eval")
+            for inputs in pbar:
+                inputs          = setup_inputs(inputs, MODEL_NAME, o_model, True)
+                inputs          = dic2cuda(inputs, DEVICE)
+                feature_indices = inputs["feature_indices"]
+                B               = inputs["input_ids"].size(0)
 
-            del inputs["feature_indices"]
-            samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
-            _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
+                del inputs["feature_indices"]
+                samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
+                _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
+                
+                start_logits_list = start_logits.tolist()
+                end_logits_list   = end_logits.tolist()
+
+                for i, feature_idx in enumerate(feature_indices):
+                    eval_feature = test_features[feature_idx.item()]
+                    unique_id    = int(eval_feature.unique_id)
+                    result       = SquadResult(unique_id, start_logits_list[i], end_logits_list[i])
+                    results.append(result)
+
+                    with dumper():
+                        dumper['unique_id']     = unique_id
+                        dumper['start_logits']  = start_logits_list[i]
+                        dumper['end_logits']    = end_logits_list[i]
+
+            predictions = compute_predictions_logits(
+                test_examples, test_features, results,
+                N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
+                os.path.join(LOGS, f"preds.bayesian.eval.{writer_name + writer_suff}.json"),
+                os.path.join(LOGS, f"nbestpreds.bayesian.eval.{writer_name + writer_suff}.json"),
+                None, True, False, NULL_SCORE_THRESH, tokenizer,
+            )
+
+            results      = squad_evaluate(test_examples, predictions)
+            report.em    = results["exact"]
+            report.f1    = results["f1"]
+            report.total = results["total"]
             
-            for i, feature_idx in enumerate(feature_indices):
-                eval_feature = test_features[feature_idx.item()]
-                unique_id    = int(eval_feature.unique_id)
-                result       = SquadResult(unique_id, start_logits.tolist()[i], end_logits.tolist()[i])
-                results.append(result)
-
-        predictions = compute_predictions_logits(
-            test_examples, test_features, results,
-            N_BEST_SIZE, MAX_ANSWER_LENGTH, LOWER_CASE,
-            os.path.join(LOGS, f"preds.bayesian.eval.{writer_name + writer_suff}.json"),
-            os.path.join(LOGS, f"nbestpreds.bayesian.eval.{writer_name + writer_suff}.json"),
-            None, True, False, NULL_SCORE_THRESH, tokenizer,
-        )
-
-        results      = squad_evaluate(test_examples, predictions)
-        report.em    = results["exact"]
-        report.f1    = results["f1"]
-        report.total = results["total"]
-        
-        pbar.set_postfix(em=report.em, f1=report.f1, total=report.total)
-        writer.add_scalar("bayesian_eval_em",    report.em,    epoch)
-        writer.add_scalar("bayesian_eval_f1",    report.f1,    epoch)
-        writer.add_scalar("bayesian_eval_total", report.total, epoch)
+            print(f'em={report.em}, f1={report.f1}, total={report.total}')
+            writer.add_scalar("bayesian_eval_em",    report.em,    epoch)
+            writer.add_scalar("bayesian_eval_f1",    report.f1,    epoch)
+            writer.add_scalar("bayesian_eval_total", report.total, epoch)
 
     # ============================ BAYESIAN ======================================
 
@@ -333,72 +435,82 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     optim     = AdamW(parameters, lr=LR, eps=ADAM_EPSILON)
     scheduler = get_linear_schedule_with_warmup(optim, N_WARMUP_STEPS, EPOCHS)
 
-    for epoch in tqdm(range(EPOCHS), desc="Bayesian Epoch"):
+    with dumper("bayesian_train"):
+        for epoch in tqdm(range(EPOCHS), desc="Bayesian Epoch"):
+            with dumper("epoch", epoch):
+                # ============================ TRAIN ======================================
+                b_model.train()
+                report.reset()
+                
+                pbar = tqdm(train_loader, desc="Bayesian Train")
+                for inputs in pbar:
+                    inputs = setup_inputs(inputs, MODEL_NAME, o_model)
+                    inputs = dic2cuda(inputs, DEVICE)
 
-        # ============================ TRAIN ======================================
-        b_model.train()
-        report.reset()
-        
-        pbar = tqdm(train_loader, desc="Bayesian Train")
-        for inputs in pbar:
-            inputs = setup_inputs(inputs, MODEL_NAME, o_model)
-            inputs = dic2cuda(inputs, DEVICE)
+                    start_positions = inputs["start_positions"]
+                    end_positions   = inputs["end_positions"]
+                    B               = inputs["input_ids"].size(0)
 
-            start_positions = inputs["start_positions"]
-            end_positions   = inputs["end_positions"]
-            B               = inputs["input_ids"].size(0)
+                    optim.zero_grad()
 
-            optim.zero_grad()
+                    samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
+                    raw_start_logits, raw_end_logits, start_logits, end_logits, log_prior, log_variational_posterior = samples
+                    
+                    ignored_idx            = start_logits.size(1)
+                    start_logits           = start_logits.clamp_(0, ignored_idx)
+                    end_logits             =   end_logits.clamp_(0, ignored_idx)
+                    criterion.ignore_index = ignored_idx
 
-            samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
-            raw_start_logits, raw_end_logits, start_logits, end_logits, log_prior, log_variational_posterior = samples
-            
-            ignored_idx            = start_logits.size(1)
-            start_logits           = start_logits.clamp_(0, ignored_idx)
-            end_logits             =   end_logits.clamp_(0, ignored_idx)
-            criterion.ignore_index = ignored_idx
+                    with dumper():
+                        dumper['start_positions']           = start_positions
+                        dumper['end_positions']             = end_positions
+                        dumper['start_logits']              = start_logits
+                        dumper['end_logits']                = end_logits
+                        dumper['log_prior']                 = log_prior
+                        dumper['log_variational_posterior'] = log_variational_posterior
 
-            start_loss    = criterion(start_logits, start_positions)
-            end_loss      = criterion(  end_logits,   end_positions)
-            start_acc     = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
-            end_acc       = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
-            start_acc_std = np.std([(torch.argmax(start_logits.clamp(0, ignored_idx), dim=1) == start_positions).float().sum().item() for start_logits in raw_start_logits])
-            end_acc_std   = np.std([(torch.argmax(  end_logits.clamp(0, ignored_idx), dim=1) ==   end_positions).float().sum().item() for   end_logits in raw_end_logits])
+                    start_loss    = criterion(start_logits, start_positions)
+                    end_loss      = criterion(  end_logits,   end_positions)
+                    start_acc     = (torch.argmax(start_logits, dim=1) == start_positions).float().sum()
+                    end_acc       = (torch.argmax(  end_logits, dim=1) ==   end_positions).float().sum()
+                    start_acc_std = np.std([(torch.argmax(start_logits.clamp(0, ignored_idx), dim=1) == start_positions).float().sum().item() for start_logits in raw_start_logits])
+                    end_acc_std   = np.std([(torch.argmax(  end_logits.clamp(0, ignored_idx), dim=1) ==   end_positions).float().sum().item() for   end_logits in raw_end_logits])
 
-            nll     = 0.5 * (start_loss    + end_loss)
-            acc     = 0.5 * (start_acc     + end_acc)
-            acc_std = 0.5 * (start_acc_std + end_acc_std)
-            loss    = (log_variational_posterior - log_prior) / len(train_loader) + nll
+                    nll     = 0.5 * (start_loss    + end_loss)
+                    acc     = 0.5 * (start_acc     + end_acc)
+                    acc_std = 0.5 * (start_acc_std + end_acc_std)
+                    loss    = (log_variational_posterior - log_prior) / len(train_loader) + nll
 
-            loss.backward()
-            nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
-            optim.step()
+                    loss.backward()
+                    nn.utils.clip_grad_norm_(b_model.parameters(), MAX_GRAD_NORM)
+                    optim.step()
 
-            report.total                     += loss.item()                      / len(train_loader)
-            report.nll                       += nll.item()                       / len(train_loader)
-            report.log_prior                 += log_prior.item()                 / len(train_loader)
-            report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
-            report.acc                       += acc.item() * 100                 / len(train_dataset)
-            report.acc_std                   += acc_std                          / len(train_loader)
+                    report.total                     += loss.item()                      / len(train_loader)
+                    report.nll                       += nll.item()                       / len(train_loader)
+                    report.log_prior                 += log_prior.item()                 / len(train_loader)
+                    report.log_variational_posterior += log_variational_posterior.item() / len(train_loader)
+                    report.acc                       += acc.item() * 100                 / len(train_dataset)
+                    report.acc_std                   += acc_std                          / len(train_loader)
 
-            pbar.set_postfix(
-                total=report.total,
-                nll=report.nll,
-                log_prior=report.log_prior,
-                log_variational_posterior=report.log_variational_posterior,
-                acc=report.acc,
-                acc_std=report.acc_std,
-            )
+                    pbar.set_postfix(
+                        total=report.total,
+                        nll=report.nll,
+                        log_prior=report.log_prior,
+                        log_variational_posterior=report.log_variational_posterior,
+                        acc=report.acc,
+                        acc_std=report.acc_std,
+                    )
 
-        scheduler.step()
-        writer.add_scalar("bayesian_train_nll",     report.nll,     epoch)
-        writer.add_scalar("bayesian_train_acc",     report.acc,     epoch)
-        writer.add_scalar("bayesian_train_acc_std", report.acc_std, epoch)
+                scheduler.step()
+                writer.add_scalar("bayesian_train_nll",     report.nll,     epoch)
+                writer.add_scalar("bayesian_train_acc",     report.acc,     epoch)
+                writer.add_scalar("bayesian_train_acc_std", report.acc_std, epoch)
 
-        # ============================ TEST =======================================
-        b_model.eval()
-        report.reset()
-        
+    # ============================ TEST =======================================
+    b_model.eval()
+    report.reset()
+    
+    with dumper("bayesian_test_after_train"):
         with torch.no_grad():
             results = []
             pbar    = tqdm(test_loader, desc="Bayesian Test")
@@ -412,11 +524,19 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 samples = sample_bayesian(b_model, inputs, SAMPLES, B, MAX_SEQ_LENGTH, DEVICE)
                 _, _, start_logits, end_logits, log_prior, log_variational_posterior = samples
                 
+                start_logits_list   = start_logits.tolist()
+                end_logits_list     = end_logits.tolist()
+
                 for i, feature_idx in enumerate(feature_indices):
                     eval_feature = test_features[feature_idx.item()]
                     unique_id    = int(eval_feature.unique_id)
-                    result       = SquadResult(unique_id, start_logits.tolist()[i], end_logits.tolist()[i])
+                    result       = SquadResult(unique_id, start_logits_list[i], end_logits_list[i])
                     results.append(result)
+
+                    with dumper():
+                        dumper['unique_id']     = unique_id
+                        dumper['start_logits']  = start_logits_list[i]
+                        dumper['end_logits']    = end_logits_list[i]
 
             predictions = compute_predictions_logits(
                 test_examples, test_features, results,
@@ -431,7 +551,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             report.f1    = results["f1"]
             report.total = results["total"]
             
-            pbar.set_postfix(em=report.em, f1=report.f1, total=report.total)
+            print(f'em={report.em}, f1={report.f1}, total={report.total}')
             writer.add_scalar("bayesian_test_em",    report.em,    epoch)
             writer.add_scalar("bayesian_test_f1",    report.f1,    epoch)
             writer.add_scalar("bayesian_test_total", report.total, epoch)
