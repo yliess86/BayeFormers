@@ -75,8 +75,10 @@ class Linear(Module):
             self.bias = NoneParameter()
             self.bias_prior = NoneParameter()
 
-        self.log_prior = 0.0
-        self.log_variational_posterior = 0.0
+#         self.log_prior = 0.0
+#         self.log_variational_posterior = 0.0
+        self.register_parameter("log_prior",                 nn.Parameter(torch.tensor(0.), requires_grad = False))
+        self.register_parameter("log_variational_posterior", nn.Parameter(torch.tensor(0.), requires_grad = False))
 
     def forward(self, input: Tensor) -> Tensor:
         """Forward
@@ -94,10 +96,10 @@ class Linear(Module):
         """
         weight, bias = self.weight.sample(), self.bias.sample()
         
-        self.log_prior = self.weight_prior.log_prob(weight)
-        self.log_prior += self.bias_prior.log_prob(bias)
-        self.log_variational_posterior = self.weight.log_prob(weight)
-        self.log_variational_posterior += self.bias.log_prob(bias)
+        self.log_prior.data = self.weight_prior.log_prob(weight)
+        self.log_prior.data += self.bias_prior.log_prob(bias)
+        self.log_variational_posterior.data = self.weight.log_prob(weight)
+        self.log_variational_posterior.data += self.bias.log_prob(bias)
         
         return F.linear(input, weight, bias=bias)
 

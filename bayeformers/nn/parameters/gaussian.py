@@ -15,6 +15,7 @@ from typing import Optional
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 
@@ -63,7 +64,11 @@ class Gaussian(Parameter):
         self.initialization = initialization
         self.mu = parameter(self.size, dtype=self.dtype)
         self.rho = parameter(self.size, dtype=self.dtype)
-        self.normal = Normal(0, 1)
+        
+        self.register_parameter("zero", nn.Parameter(torch.tensor(0.).float(), requires_grad = False))
+        self.register_parameter("one", nn.Parameter(torch.tensor(1.).float(),  requires_grad = False))
+        
+        self.normal = Normal(self.zero, self.one)
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -135,10 +140,14 @@ class ScaledGaussianMixture(Parameter):
             sigma2 (float): sigma for the second gaussian
         """
         super(ScaledGaussianMixture, self).__init__()
-        self.pi = pi
-        self.sigma1, self.sigma2 = sigma1, sigma2
-        self.gaussian1 = Normal(0, self.sigma1)
-        self.gaussian2 = Normal(0, self.sigma2)
+        
+        self.register_parameter("pi",     nn.Parameter(torch.tensor(pi).float(),     requires_grad = False))
+        self.register_parameter("sigma1", nn.Parameter(torch.tensor(sigma1).float(), requires_grad = False))
+        self.register_parameter("sigma2", nn.Parameter(torch.tensor(sigma2).float(), requires_grad = False))
+        self.register_parameter("zero",   nn.Parameter(torch.tensor(0.).float(),     requires_grad = False))
+        
+        self.gaussian1 = Normal(self.zero, self.sigma1)
+        self.gaussian2 = Normal(self.zero, self.sigma2)
 
     def sample(self) -> Tensor:
         """Sample

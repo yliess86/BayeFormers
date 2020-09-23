@@ -29,7 +29,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class Report:
     def __init__(self) -> None:
         self.reset()
@@ -116,7 +115,7 @@ def sample_bayesian(
     end_logits                 : torch.Tensor     = torch.zeros(samples, batch_size, max_seq_len).to(device)
     log_prior                  : torch.Tensor     = torch.zeros(samples, batch_size             ).to(device)
     log_variational_posterior  : torch.Tensor     = torch.zeros(samples, batch_size             ).to(device)
-
+        
     for sample in range(samples):
         outputs                           = model(**inputs)
         start_logits[sample]              = outputs[-2]
@@ -126,8 +125,8 @@ def sample_bayesian(
 
     raw_start_logits          = start_logits
     raw_end_logits            = end_logits
-    start_logits              = start_logits.mean(0).tolist()
-    end_logits                = end_logits.mean(0).tolist()
+    start_logits              = start_logits.mean(0)
+    end_logits                = end_logits.mean(0)
     log_prior                 = log_prior.mean()
     log_variational_posterior = log_variational_posterior.mean()
 
@@ -135,8 +134,8 @@ def sample_bayesian(
 
 
 def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: str) -> float:
-    EPOCHS            = 5
-    BATCH_SIZE        = 8
+    EPOCHS            = 3
+    BATCH_SIZE        = 13
     SAMPLES           = 10
     FREEZE            = True
     LOGS              = "logs"
@@ -148,7 +147,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     NULL_SCORE_THRESH = 0.0
     LOWER_CASE        = True
     THREADS           = 4
-    LOADER_OPTIONS    = { "num_workers": 6, "pin_memory": True }
+    LOADER_OPTIONS    = { "num_workers": 10, "pin_memory": True }
     LR                = 5e-5
     ADAM_EPSILON      = 1e-8
     N_WARMUP_STEPS    = 0
@@ -162,7 +161,8 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
     writer      = SummaryWriter(writer_path + writer_suff)
 
     o_model, tokenizer = setup_model(MODEL_NAME, LOWER_CASE)
-    o_model            = o_model.to(DEVICE)
+    o_model = torch.nn.DataParallel(o_model, device_ids=[0, 1, 2, 3])
+    o_model.to(DEVICE)
 
     squadv1 = {
         "max_seq_length"  : MAX_SEQ_LENGTH,
@@ -212,7 +212,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             
             ignored_idx            = start_logits.size(1)
             start_logits           = start_logits.clamp_(0, ignored_idx)
-            end_logits             =   end_logits.clamp_(0, ignored_idx)
+            end_logits             = end_logits.clamp_(0, ignored_idx)
             criterion.ignore_index = ignored_idx
 
             start_loss = criterion(start_logits, start_positions)
@@ -300,7 +300,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
             for i, feature_idx in enumerate(feature_indices):
                 eval_feature = test_features[feature_idx.item()]
                 unique_id    = int(eval_feature.unique_id)
-                result       = SquadResult(unique_id, start_logits[:, i], end_logits[:, i])
+                result       = SquadResult(unique_id, start_logits.tolist()[i], end_logits.tolist()[i])
                 results.append(result)
 
         predictions = compute_predictions_logits(
@@ -415,7 +415,7 @@ def train(EXP: str, MODEL_NAME: str, DELTA: float, WEIGHT_DECAY: float, DEVICE: 
                 for i, feature_idx in enumerate(feature_indices):
                     eval_feature = test_features[feature_idx.item()]
                     unique_id    = int(eval_feature.unique_id)
-                    result       = SquadResult(unique_id, start_logits[:, i], end_logits[:, i])
+                    result       = SquadResult(unique_id, start_logits.tolist()[i], end_logits.tolist()[i])
                     results.append(result)
 
             predictions = compute_predictions_logits(
