@@ -89,6 +89,7 @@ class Dumper:
         if not os.access(self.filename, os.W_OK):
             raise Exception("Access denied to create file")
 
+    def reset(self):
         self.root_section    = Section(None)
         self.current_section = self.root_section
 
@@ -104,16 +105,17 @@ class Dumper:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.current_section = self.current_section.parent
-        if not self.current_section:
+        if self.current_section.is_root():
             self.dump()
 
     def dump(self):
         posfix = "".join([random.choice(string.ascii_letters + string.digits) for n in range(5)]).upper()
         self.filename = f'{self.original_filename}.{self.section_name}.{postfix}'
-        print("Dumping results")
+        print(f'Dumping results to {self.filename}')
         with open(self.filename, 'w+') as fh:
             fh.write(repr(self.root_section))
         print("Done dumping results")
+        self.reset()
 
     def __setitem__(self, name: str, value):
         if type(value) == torch.Tensor:
